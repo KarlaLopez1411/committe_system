@@ -1,0 +1,11 @@
+node_modules
+.next
+coverage
+public/sw.js
+pnpm-lock.yaml
+package-lock.json
+
+# Documentation and tooling artifacts (not application source)
+.kiro
+.vscode
+*.md

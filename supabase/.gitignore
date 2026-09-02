@@ -1,0 +1,9 @@
+# Artefactos locales del Supabase CLI — no versionar.
+# Docs: https://supabase.com/docs/guides/local-development
+
+# Directorio de estado temporal generado por `supabase start`.
+.branches
+.temp
+
+# Datos y secretos locales.
+.env

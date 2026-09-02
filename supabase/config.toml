@@ -1,0 +1,65 @@
+# Configuración de Supabase local (Supabase CLI) para SAC.
+# Docs: https://supabase.com/docs/guides/local-development
+#
+# Este archivo define el entorno de desarrollo local. Las claves reales
+# (anon / service_role) NO se guardan aquí: se documentan en `.env.example`
+# y se cargan desde variables de entorno.
+
+# Identificador del proyecto. Se usa para nombrar los contenedores Docker locales.
+project_id = "sac-sistema-administracion-comunitaria"
+
+[api]
+enabled = true
+# Puerto de la API REST/GraphQL de PostgREST expuesta por Supabase local.
+port = 54321
+# Esquemas expuestos vía la API.
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+# Máximo de filas devueltas por una sola petición REST.
+max_rows = 1000
+
+[db]
+# Puerto del PostgreSQL local.
+port = 54322
+# Puerto del pooler de conexiones (shadow para migraciones).
+shadow_port = 54320
+# Versión mayor de PostgreSQL. Debe coincidir con la del proyecto remoto.
+major_version = 15
+
+[db.migrations]
+# Ruta donde el CLI busca las migraciones SQL versionadas.
+# Se aplican en orden lexicográfico (0001_, 0002_, ...).
+schema_paths = []
+
+[studio]
+enabled = true
+port = 54323
+
+# Inbucket captura los correos salientes en desarrollo (recuperación de contraseña, etc.).
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+# Límite de tamaño de archivo para comprobantes en buckets privados.
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+# URL base del sitio para enlaces de correo (login, recuperación).
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+# Expiración del JWT de sesión (segundos). Alineado con control de sesiones.
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[analytics]
+enabled = false
