@@ -4,6 +4,7 @@ import { AppNavMobile, AppNavSidebar } from '@/components/app-nav';
 import { AppLogo } from '@/components/ui/app-logo';
 import { LogoutIcon } from '@/components/ui/icons';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { resolveActionCtx } from '@/server/actions/resolve-ctx';
 
 import { signOutAction } from '../(auth)/actions';
 
@@ -48,6 +49,8 @@ async function resolveIsSeller(): Promise<boolean> {
  */
 export default async function AppShellLayout({ children }: { children: ReactNode }) {
   const isSeller = await resolveIsSeller();
+  const ctx = await resolveActionCtx();
+  const permissions = ctx?.permissions ?? [];
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">
@@ -56,7 +59,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
         <div className="mb-6 flex items-center justify-center">
           <AppLogo size={240} className="h-auto max-w-full" />
         </div>
-        <AppNavSidebar isSeller={isSeller} />
+        <AppNavSidebar isSeller={isSeller} permissions={permissions} />
       </aside>
 
       <div className="flex min-h-screen flex-col">
@@ -64,7 +67,7 @@ export default async function AppShellLayout({ children }: { children: ReactNode
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-950">
           <div className="flex items-center gap-2 lg:hidden">
             {/* Menú hamburguesa (tablet y menor) */}
-            <AppNavMobile isSeller={isSeller} />
+            <AppNavMobile isSeller={isSeller} permissions={permissions} />
             {/* Logo específico para móvil (sin el texto "SAC"). */}
             <AppLogo src="/logo-mobile.png" size={160} className="h-auto max-w-[160px]" />
           </div>

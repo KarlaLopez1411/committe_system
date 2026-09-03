@@ -94,6 +94,7 @@ export default async function FinanzasPage() {
         categories={categories}
         canManageCommittee={perms.canManageCommittee}
         canCreateTransaction={perms.canCreateTransaction}
+        canApproveTransaction={perms.canApproveTransaction}
       />
     </section>
   );

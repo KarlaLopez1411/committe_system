@@ -17,12 +17,12 @@ interface CommitteeRow {
   email: string | null;
 }
 
-const TABS = [
+const ALL_TABS = [
   { id: 'datos', label: 'Datos del comité' },
   { id: 'usuarios', label: 'Usuarios' },
 ] as const;
 
-type TabId = (typeof TABS)[number]['id'];
+type TabId = (typeof ALL_TABS)[number]['id'];
 
 /**
  * Configuración con pestañas: datos del comité (formulario + código para
@@ -34,13 +34,18 @@ export function ConfigTabs({
   users,
   roles,
   usersError,
+  canManage,
 }: {
   committee: CommitteeRow;
   code: string | null;
   users: CommitteeUserRow[];
   roles: RoleOption[];
   usersError: string | null;
+  /** committee.manage: editar datos y gestionar usuarios. */
+  canManage: boolean;
 }) {
+  // La tab "Usuarios" solo existe para administradores.
+  const tabs = canManage ? ALL_TABS : ALL_TABS.filter((t) => t.id !== 'usuarios');
   const [active, setActive] = useState<TabId>('datos');
 
   return (
@@ -50,7 +55,7 @@ export function ConfigTabs({
         aria-label="Secciones de configuración"
         className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800"
       >
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const isActive = t.id === active;
           return (
             <button
@@ -75,11 +80,11 @@ export function ConfigTabs({
       {active === 'datos' ? (
         <div className="flex flex-col gap-6">
           <CommitteeCodeCard code={code} />
-          <CommitteeConfigForm committee={committee} />
+          <CommitteeConfigForm committee={committee} readOnly={!canManage} />
         </div>
       ) : null}
 
-      {active === 'usuarios' ? (
+      {active === 'usuarios' && canManage ? (
         <UsersManager users={users} roles={roles} error={usersError} />
       ) : null}
     </div>

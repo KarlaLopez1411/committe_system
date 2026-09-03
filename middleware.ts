@@ -6,6 +6,7 @@ import {
   isSessionInactive,
 } from '@/server/auth';
 import { effectivePermissions } from '@/server/authz';
+import { canAccessPath } from '@/lib/route-permissions';
 
 // ── In-process rate limiter (R40.1) ──────────────────────────────────────────
 // Per-instance store; replace with Upstash/Redis for multi-instance production.
@@ -178,14 +179,23 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-sac-user-id', user.id);
 
+  let effectivePerms: string[] = [];
   if (activeCommittee) {
     requestHeaders.set('x-sac-committee-id', activeCommittee);
     requestHeaders.set('x-sac-is-superadmin', 'false');
     try {
-      const permissions = await effectivePermissions(user.id, activeCommittee, supabase);
-      requestHeaders.set('x-sac-permissions', permissions.join(','));
+      effectivePerms = await effectivePermissions(user.id, activeCommittee, supabase);
+      requestHeaders.set('x-sac-permissions', effectivePerms.join(','));
     } catch {
       requestHeaders.set('x-sac-permissions', '');
+    }
+
+    // ── Guardia de ruta por permisos (R6.3) ─────────────────────────────────
+    // Si la ruta requiere un permiso que el usuario no tiene, se redirige al
+    // panel. Defensa en profundidad junto al gating de UI y los checks del
+    // servicio. Solo aplica cuando ya hay un comité activo resuelto.
+    if (!canAccessPath(request.nextUrl.pathname, effectivePerms)) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   }
 

@@ -60,6 +60,7 @@ export function FinanzasTabs({
   categories,
   canManageCommittee,
   canCreateTransaction,
+  canApproveTransaction,
 }: {
   transactions: TransactionRow[];
   accounts: AccountRow[];
@@ -69,6 +70,8 @@ export function FinanzasTabs({
   canManageCommittee: boolean;
   /** transactions.create: registrar ingresos, egresos y transferencias. */
   canCreateTransaction: boolean;
+  /** transactions.approve: aprobar/anular transacciones. */
+  canApproveTransaction: boolean;
 }) {
   const [active, setActive] = useState<TabId>('movimientos');
   const [accountsPage, setAccountsPage] = useState(1);
@@ -111,7 +114,7 @@ export function FinanzasTabs({
 
       {/* Movimientos */}
       {active === 'movimientos' ? (
-        <TransactionList transactions={transactions} />
+        <TransactionList transactions={transactions} canApprove={canApproveTransaction} canCreate={canCreateTransaction} />
       ) : null}
 
       {/* Cuentas */}
@@ -146,12 +149,12 @@ export function FinanzasTabs({
 
       {/* Ingresos (lista = movimientos tipo income) */}
       {active === 'ingresos' ? (
-        <TransactionList transactions={transactions.filter((t) => t.type === 'income')} showStatusFilter />
+        <TransactionList transactions={transactions.filter((t) => t.type === 'income')} showStatusFilter canApprove={canApproveTransaction} canCreate={canCreateTransaction} />
       ) : null}
 
       {/* Egresos */}
       {active === 'egresos' ? (
-        <TransactionList transactions={transactions.filter((t) => t.type === 'expense')} showStatusFilter />
+        <TransactionList transactions={transactions.filter((t) => t.type === 'expense')} showStatusFilter canApprove={canApproveTransaction} canCreate={canCreateTransaction} />
       ) : null}
 
       {/* Categorías (lista con editar/eliminar; el alta va por el FAB) */}
@@ -161,7 +164,7 @@ export function FinanzasTabs({
 
       {/* Transferencias */}
       {active === 'transferencias' ? (
-        <TransactionList transactions={transactions.filter((t) => t.type === 'transfer')} />
+        <TransactionList transactions={transactions.filter((t) => t.type === 'transfer')} canApprove={canApproveTransaction} canCreate={canCreateTransaction} />
       ) : null}
 
       {/* ── FAB por pestaña ──────────────────────────────────────────────── */}

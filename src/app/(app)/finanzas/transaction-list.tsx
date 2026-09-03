@@ -35,7 +35,17 @@ export interface TransactionRow {
   categoryName?: string | null;
 }
 
-export function TransactionActions({ tx }: { tx: TransactionRow }) {
+export function TransactionActions({
+  tx,
+  canApprove = false,
+  canCreate = false,
+}: {
+  tx: TransactionRow;
+  /** transactions.approve: puede aprobar y anular. */
+  canApprove?: boolean;
+  /** transactions.create: puede cancelar (descartar) un borrador. */
+  canCreate?: boolean;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -86,19 +96,19 @@ export function TransactionActions({ tx }: { tx: TransactionRow }) {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex gap-2">
-        {tx.status === 'draft' ? (
-          <>
-            <button type="button" disabled={isPending} onClick={approve}
-              className="min-h-touch rounded-lg border border-green-500 px-3 py-1 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-60 dark:text-green-300 dark:hover:bg-green-950">
-              Aprobar
-            </button>
-            <button type="button" disabled={isPending} onClick={cancelDraft}
-              className="min-h-touch rounded-lg border border-red-300 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950">
-              Cancelar
-            </button>
-          </>
+        {tx.status === 'draft' && canApprove ? (
+          <button type="button" disabled={isPending} onClick={approve}
+            className="min-h-touch rounded-lg border border-green-500 px-3 py-1 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-60 dark:text-green-300 dark:hover:bg-green-950">
+            Aprobar
+          </button>
         ) : null}
-        {tx.status === 'posted' ? (
+        {tx.status === 'draft' && canCreate ? (
+          <button type="button" disabled={isPending} onClick={cancelDraft}
+            className="min-h-touch rounded-lg border border-red-300 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950">
+            Cancelar
+          </button>
+        ) : null}
+        {tx.status === 'posted' && canApprove ? (
           <button type="button" disabled={isPending} onClick={voidTx}
             className="min-h-touch rounded-lg border border-red-300 px-3 py-1 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950">
             Anular
@@ -123,10 +133,16 @@ const PAGE_SIZE = 20;
 export function TransactionList({
   transactions,
   showStatusFilter = false,
+  canApprove = false,
+  canCreate = false,
 }: {
   transactions: TransactionRow[];
   /** Muestra el filtro por estado (pendientes/aprobados). Útil en Ingresos/Egresos. */
   showStatusFilter?: boolean;
+  /** transactions.approve: mostrar botones Aprobar/Anular. */
+  canApprove?: boolean;
+  /** transactions.create: mostrar botón Cancelar en borradores. */
+  canCreate?: boolean;
 }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilterId>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -256,7 +272,7 @@ export function TransactionList({
                         {tx.type === 'income' ? '+' : tx.type === 'expense' ? '−' : ''}${tx.amount}
                       </span>
                     ) : null}
-                    <TransactionActions tx={tx} />
+                    <TransactionActions tx={tx} canApprove={canApprove} canCreate={canCreate} />
                   </div>
                 </li>
               );

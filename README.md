@@ -90,6 +90,14 @@ SUPABASE_SERVICE_ROLE_KEY=<supabase-service-role-key>
 
 Obtén la URL y las claves desde **Supabase > Project Settings > API**. `SUPABASE_SERVICE_ROLE_KEY` es una credencial privada: configúrala únicamente como variable de entorno de Netlify y no la incluyas en el código del cliente, en el repositorio ni en logs.
 
+### Alerta de secretos de Netlify
+
+Si Netlify muestra `Your build failed because we found potentially exposed secrets` para `NEXT_PUBLIC_SUPABASE_ANON_KEY` o `NEXT_PUBLIC_SUPABASE_URL`, edita esas dos variables en Netlify y desmarca **Contains secret values**. También puedes eliminarlas y crearlas de nuevo como variables normales. Ambas se incorporan intencionalmente al bundle del navegador porque usan el prefijo `NEXT_PUBLIC_`; la URL de Supabase y la clave `anon` no deben tratarse como secretos de servidor.
+
+Conserva **Contains secret values** únicamente para `SUPABASE_SERVICE_ROLE_KEY` y limita esa variable al ámbito del servidor/Functions cuando la interfaz de Netlify lo permita. No publiques su valor en el repositorio, en logs ni en el bundle del cliente.
+
+Después de cambiar la clasificación, ejecuta **Clear cache and deploy site**. No es necesario desactivar el escaneo global de secretos.
+
 ### 3. Configurar las URLs de autenticación en Supabase
 
 Después de conocer el dominio de Netlify, por ejemplo `https://sac-comite.netlify.app`:

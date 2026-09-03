@@ -3,6 +3,7 @@ import {
   listCommitteeUsersAction,
   listRolesAction,
 } from '@/server/actions/role-actions';
+import { resolvePagePerms } from '@/server/actions/page-perms';
 
 import { ConfigTabs } from './config-tabs';
 
@@ -45,6 +46,8 @@ export default async function ConfigurationPage() {
 
   const committee = data as CommitteeRow;
 
+  const perms = await resolvePagePerms();
+
   // Gestión de usuarios: solo disponible para quien tenga `users.manage`.
   // Las acciones devuelven AUTHZ_FORBIDDEN si no; ese caso se muestra como aviso.
   const [usersResult, rolesResult] = await Promise.all([
@@ -72,6 +75,7 @@ export default async function ConfigurationPage() {
         users={users}
         roles={roles}
         usersError={usersError}
+        canManage={perms.canManageCommittee}
       />
     </section>
   );
