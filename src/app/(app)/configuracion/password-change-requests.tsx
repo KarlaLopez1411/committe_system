@@ -148,6 +148,7 @@ function PasswordChangeRequestRow({
   const [error, setError] = useState<string | null>(null);
   const [showTempPassword, setShowTempPassword] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const handleApprove = async () => {
     setError(null);
@@ -261,16 +262,26 @@ function PasswordChangeRequestRow({
                   type="text"
                   value={tempPassword || temporaryPassword || ''}
                   readOnly
-                  className="flex-1 px-3 py-2 bg-white border border-blue-300 rounded font-mono text-sm dark:bg-gray-800 dark:border-blue-700"
+                  className={`flex-1 px-3 py-2 bg-white border rounded font-mono text-sm transition-colors dark:bg-gray-800 ${
+                    copied
+                      ? 'border-green-500 bg-green-50 dark:border-green-500 dark:bg-green-900/20'
+                      : 'border-blue-300 dark:border-blue-700'
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(tempPassword || temporaryPassword || '');
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
                   }}
-                  className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                  className={`px-3 py-2 text-sm rounded transition-colors ${
+                    copied
+                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
                 >
-                  Copiar
+                  {copied ? '✓ Copiado' : 'Copiar'}
                 </button>
                 <button
                   type="button"
