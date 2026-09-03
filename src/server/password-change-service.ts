@@ -714,6 +714,7 @@ function encryptTemporaryPassword(password: string): string {
 
 /**
  * Desencripta contraseña temporal.
+ * Compatibilidad hacia atrás: si está en plaintext (formato antiguo), retorna como está.
  */
 function decryptTemporaryPassword(encrypted: string | undefined | null): string | null {
   if (!encrypted) return null;
@@ -724,24 +725,29 @@ function decryptTemporaryPassword(encrypted: string | undefined | null): string 
       'utf-8'
     );
 
-    const keyHash = require('crypto').createHash('sha256').update(key).digest();
     const parts = encrypted.split(':');
 
-    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+    // Detectar si está encriptado (formato: iv:encrypted:authTag)
+    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+      const keyHash = require('crypto').createHash('sha256').update(key).digest();
+      const iv = Buffer.from(parts[0], 'base64');
+      const encryptedData = parts[1];
+      const authTag = Buffer.from(parts[2], 'base64');
 
-    const iv = Buffer.from(parts[0]!, 'base64');
-    const encryptedData = parts[1]!;
-    const authTag = Buffer.from(parts[2]!, 'base64');
+      const decipher = createDecipheriv('aes-256-gcm', keyHash, iv);
+      decipher.setAuthTag(authTag);
 
-    const decipher = createDecipheriv('aes-256-gcm', keyHash, iv);
-    decipher.setAuthTag(authTag);
+      let decrypted = decipher.update(encryptedData, 'hex', 'utf-8');
+      decrypted += decipher.final('utf-8');
 
-    let decrypted = decipher.update(encryptedData, 'hex', 'utf-8');
-    decrypted += decipher.final('utf-8');
+      return decrypted;
+    }
 
-    return decrypted;
+    // Si no tiene formato encriptado, asumir que está en plaintext (contraseña vieja)
+    return encrypted;
   } catch {
-    return null;
+    // Si la desencriptación falla, asumir plaintext
+    return encrypted;
   }
 }
 
