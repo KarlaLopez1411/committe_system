@@ -25,12 +25,14 @@ function revalidatePasswordPaths(): void {
 }
 
 export async function requestPasswordChangeAction(
-  userId: UUID,
+  userId?: UUID,
   reason?: string,
 ): Promise<Result<{ requestId: UUID }>> {
   const ctx = await resolveCtx();
   if (!ctx) return unauthenticated();
-  const result = await createPasswordChangeService().requestChange(ctx, userId, reason);
+  // Si no se proporciona userId, usar el usuario actual (auto-request)
+  const targetUserId = userId ?? ctx.userId;
+  const result = await createPasswordChangeService().requestChange(ctx, targetUserId, reason);
   if (result.ok) revalidatePasswordPaths();
   return result;
 }

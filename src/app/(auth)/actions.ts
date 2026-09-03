@@ -75,6 +75,24 @@ export async function signInAction(
   await markActivity();
 
   const userId = result.value.user.id;
+
+  // Verificar si hay una solicitud de cambio de contraseña PENDIENTE para este usuario
+  const supabase = createSupabaseAdminClient();
+  try {
+    const { data: pendingRequest } = await supabase
+      .from('password_change_requests')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (pendingRequest) {
+      return { error: 'Tu contraseña ha sido solicitada para cambio. Contacta al administrador.' };
+    }
+  } catch {
+    // best-effort: si no se puede verificar, continuar normalmente
+  }
+
   const resolved = await auth.resolveActiveCommittee(userId);
 
   if (!resolved.ok) {

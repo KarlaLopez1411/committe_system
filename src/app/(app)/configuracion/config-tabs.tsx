@@ -9,6 +9,7 @@ import { CommitteeConfigForm } from './committee-config-form';
 import { CommitteeCodeCard } from './committee-code-card';
 import { UsersManager } from './users-manager';
 import { PasswordChangeRequestsTable } from './password-change-requests';
+import { PasswordChangeRequestForm } from './password-change-request-form';
 
 interface CommitteeRow {
   id: UUID;
@@ -93,7 +94,12 @@ export function ConfigTabs({
       ) : null}
 
       {active === 'cambios' ? (
-        <PasswordChangeRequestsTable requests={passwordChanges} />
+        <div className="flex flex-col gap-6">
+          <PasswordChangeRequestForm />
+          {passwordChanges.length > 0 && (
+            <PasswordChangeRequestsTable requests={passwordChanges} />
+          )}
+        </div>
       ) : null}
     </div>
   );
