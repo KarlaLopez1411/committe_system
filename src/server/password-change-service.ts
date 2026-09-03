@@ -547,7 +547,7 @@ export function createPasswordChangeService(
 
     /**
      * Usuario cambia su contraseña (post-login con pass temporal).
-     * Actualiza auth.users y limpia force_password_change flag.
+     * Actualiza auth.users, limpia force_password_change flag, registra cuándo se cambió.
      */
     async changePassword(ctx, newPassword): Promise<Result<void>> {
       // Validar contraseña (mín 12 caracteres, complejidad)
@@ -570,15 +570,26 @@ export function createPasswordChangeService(
         );
       }
 
-      // Limpiar flag force_password_change
+      // Limpiar flag y registrar cambio
       const { error: profileError } = await client
         .from('profiles')
         .update({ force_password_change: false })
         .eq('id', ctx.userId);
 
       if (profileError) {
-        // Log pero no falla (la contraseña ya cambió)
         console.error('No se pudo limpiar force_password_change:', profileError.message);
+      }
+
+      // Registrar cuándo se cambió la contraseña
+      const { error: updateError } = await client
+        .from('password_change_requests')
+        .update({ password_changed_at: new Date().toISOString() })
+        .eq('user_id', ctx.userId)
+        .eq('committee_id', ctx.committeeId)
+        .eq('status', 'approved');
+
+      if (updateError) {
+        console.error('No se pudo registrar cambio de contraseña:', updateError.message);
       }
 
       // Auditar cambio
@@ -589,6 +600,7 @@ export function createPasswordChangeService(
         entityId: ctx.userId,
         newValues: {
           force_password_change_cleared: true,
+          password_changed_at: new Date().toISOString(),
         },
       });
 

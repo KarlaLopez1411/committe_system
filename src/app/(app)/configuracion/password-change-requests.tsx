@@ -15,6 +15,8 @@ interface PasswordChangeRequestProps {
   requestedAt: string;
   approvedAt?: string;
   rejectedReason?: string;
+  passwordChangedAt?: string;
+  temporaryPasswordUsedAt?: string;
   onSuccess?: () => void;
 }
 
@@ -32,6 +34,8 @@ export function PasswordChangeRequestsTable({
     requestedAt: string;
     approvedAt?: string;
     rejectedReason?: string;
+    passwordChangedAt?: string;
+    temporaryPasswordUsedAt?: string;
   }>;
   onRefresh?: () => void;
 }) {
@@ -77,6 +81,8 @@ export function PasswordChangeRequestsTable({
                     requestedAt={req.requestedAt}
                     approvedAt={req.approvedAt}
                     rejectedReason={req.rejectedReason}
+                    passwordChangedAt={req.passwordChangedAt}
+                    temporaryPasswordUsedAt={req.temporaryPasswordUsedAt}
                     onSuccess={onRefresh}
                   />
                 ))}
@@ -129,8 +135,9 @@ function PasswordChangeRequestRow({
   status,
   reason,
   requestedAt,
-  approvedAt,
   rejectedReason,
+  passwordChangedAt,
+  temporaryPasswordUsedAt,
   onSuccess,
 }: PasswordChangeRequestProps) {
   const [isPending, startTransition] = useTransition();
@@ -210,10 +217,17 @@ function PasswordChangeRequestRow({
               </button>
             </div>
           )}
-          {status === 'approved' && approvedAt && (
-            <p className="text-xs text-gray-500">
-              {new Date(approvedAt).toLocaleDateString()}
-            </p>
+          {status === 'approved' && (
+            <div className="flex flex-col gap-1 text-xs">
+              <p className="text-gray-600 dark:text-gray-400">
+                {temporaryPasswordUsedAt ? '✓ Usada' : '— Pendiente uso'}
+              </p>
+              {passwordChangedAt && (
+                <p className="text-green-600 dark:text-green-400">
+                  ✓ Cambiada: {new Date(passwordChangedAt).toLocaleDateString()}
+                </p>
+              )}
+            </div>
           )}
           {status === 'rejected' && rejectedReason && (
             <p className="text-xs text-red-600 dark:text-red-400">

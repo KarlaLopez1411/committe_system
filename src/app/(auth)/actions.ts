@@ -89,6 +89,21 @@ export async function signInAction(
     if (pendingRequest) {
       return { error: 'Tu contraseña ha sido solicitada para cambio. Contacta al administrador.' };
     }
+
+    // Registrar que se usó la temp password (si existe solicitud aprobada)
+    const { data: approvedRequest } = await supabase
+      .from('password_change_requests')
+      .select('id, temporary_password_used_at')
+      .eq('user_id', userId)
+      .eq('status', 'approved')
+      .maybeSingle();
+
+    if (approvedRequest && !approvedRequest.temporary_password_used_at) {
+      await supabase
+        .from('password_change_requests')
+        .update({ temporary_password_used_at: new Date().toISOString() })
+        .eq('id', approvedRequest.id);
+    }
   } catch {
     // best-effort: si no se puede verificar, continuar normalmente
   }
