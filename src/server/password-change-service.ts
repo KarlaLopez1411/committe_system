@@ -235,12 +235,24 @@ export function createPasswordChangeService(
       // Generar contraseña temporal (12 caracteres alphanumérici + símbolos)
       const tempPassword = generateTemporaryPassword();
 
+      console.log('[DEBUG] Temporary password generated:', {
+        userId: req.user_id,
+        tempPassword,
+        tempPasswordLength: tempPassword.length,
+      });
+
       // Actualizar auth.users con nueva contraseña
       const { error: authError } = await client.auth.admin.updateUserById(req.user_id, {
         password: tempPassword,
       });
 
+      console.log('[DEBUG] Auth update result:', {
+        userId: req.user_id,
+        authError: authError ? authError.message : 'success',
+      });
+
       if (authError) {
+        console.error('[ERROR] Failed to update auth password:', authError);
         return err(
           'password_change/auth-update-failed',
           `No se pudo actualizar contraseña en auth: ${authError.message}.`,
