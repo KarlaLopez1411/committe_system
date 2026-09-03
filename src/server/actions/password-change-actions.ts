@@ -51,13 +51,31 @@ export async function requestPasswordChangeAsGuestAction(
 
   const supabase = await (await import('@/lib/supabase/server')).createSupabaseServerClient();
 
-  // Buscar usuario por email en auth
-  const { data: { users }, error: authError } = await supabase.auth.admin.listUsers();
-  if (authError || !users) {
-    return err('auth/lookup-failed', 'No se pudo verificar el correo.');
+  // Buscar usuario por email en auth con paginación
+  let user = null;
+  const pageSize = 100;
+
+  try {
+    // Iterar por páginas hasta encontrar el usuario o agotar páginas
+    for (let i = 0; i < 10; i++) {
+      const { data: { users }, error: authError } = await supabase.auth.admin.listUsers({
+        page: i,
+        perPage: pageSize,
+      });
+
+      if (authError) {
+        return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
+      }
+
+      if (!users || users.length === 0) break; // No más usuarios
+
+      user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+      if (user) break;
+    }
+  } catch {
+    return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
   }
 
-  const user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
   if (!user) {
     // Respuesta genérica para no revelar si el email existe
     return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
@@ -97,12 +115,12 @@ export async function requestPasswordChangeAsGuestAction(
         'password_change/request-failed',
         insertError.message.includes('unique')
           ? 'Ya hay una solicitud pendiente para este usuario.'
-          : 'No se pudo crear la solicitud.',
+          : 'Si el correo está registrado, recibirás instrucciones.',
       );
     }
 
     if (!created) {
-      return err('password_change/no-result', 'No se pudo crear la solicitud.');
+      return err('password_change/no-result', 'Si el correo está registrado, recibirás instrucciones.');
     }
 
     revalidatePasswordPaths();
