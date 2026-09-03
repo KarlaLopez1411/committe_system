@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { requestPasswordChangeAction } from '@/server/actions/password-change-actions';
+import { requestPasswordChangeAction, requestPasswordChangeAsGuestAction } from '@/server/actions/password-change-actions';
 
 interface RequestChangeState {
   error?: string;
@@ -15,14 +15,16 @@ const initialState: RequestChangeState = {};
 /**
  * Pantalla de solicitud de cambio de contraseña (reemplazo de recuperación vía email).
  *
- * El usuario solicita un cambio de contraseña. El admin lo aprueba desde
+ * El usuario (autenticado o no) solicita un cambio de contraseña. El admin lo aprueba desde
  * /configuracion y genera una contraseña temporal que comparte manualmente.
  */
 export default function RecoverPasswordPage() {
   const [state, setStateLocal] = useState<RequestChangeState>(initialState);
+  const [email, setEmail] = useState('');
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
 
+  // Detectar si está autenticado (try-catch al cargar)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -30,13 +32,21 @@ export default function RecoverPasswordPage() {
     setPending(true);
 
     try {
-      // Solicitar cambio (sin userId, usa el usuario actual)
-      const result = await requestPasswordChangeAction(undefined, reason || undefined);
+      let result;
+
+      // Si es guest (proporciona email): usar acción de guest
+      if (email) {
+        result = await requestPasswordChangeAsGuestAction(email, reason || undefined);
+      } else {
+        // Si NO proporciona email: intenta usar acción autenticada (usuario actual)
+        result = await requestPasswordChangeAction(undefined, reason || undefined);
+      }
 
       if (result.ok) {
         setStateLocal({
           message: '✓ Solicitud enviada. El administrador la revisará y te proporcionará una nueva contraseña.',
         });
+        setEmail('');
         setReason('');
       } else {
         setStateLocal({ error: result.error.message });
@@ -73,6 +83,18 @@ export default function RecoverPasswordPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Correo (opcional - deja vacío si estás autenticado)
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={pending}
+              placeholder="tu@correo.com"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-base disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
+            />
+          </label>
+
           <label className="flex flex-col gap-1 text-sm font-medium">
             Razón (opcional)
             <textarea
