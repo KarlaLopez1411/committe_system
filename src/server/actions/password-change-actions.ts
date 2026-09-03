@@ -45,7 +45,10 @@ export async function requestPasswordChangeAsGuestAction(
   email: string,
   reason?: string,
 ): Promise<Result<{ requestId: UUID }>> {
+  console.log('[DEBUG] requestPasswordChangeAsGuestAction called with:', { email, reasonLength: reason?.length });
+
   if (!email || !email.includes('@')) {
+    console.log('[DEBUG] Invalid email format');
     return err('auth/invalid-email', 'El correo no es válido.');
   }
 
@@ -58,43 +61,63 @@ export async function requestPasswordChangeAsGuestAction(
   try {
     // Iterar por páginas hasta encontrar el usuario o agotar páginas
     for (let i = 0; i < 10; i++) {
+      console.log(`[DEBUG] Searching for user on page ${i}`);
       const { data: { users }, error: authError } = await supabase.auth.admin.listUsers({
         page: i,
         perPage: pageSize,
       });
 
       if (authError) {
+        console.error(`[ERROR] Failed to list users on page ${i}:`, authError);
         return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
       }
 
-      if (!users || users.length === 0) break; // No más usuarios
+      if (!users || users.length === 0) {
+        console.log(`[DEBUG] No more users (page ${i} returned 0 users)`);
+        break; // No más usuarios
+      }
 
+      console.log(`[DEBUG] Found ${users.length} users on page ${i}`);
       user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-      if (user) break;
+      if (user) {
+        console.log('[DEBUG] User found:', { userId: user.id, userEmail: user.email });
+        break;
+      }
     }
-  } catch {
+  } catch (e) {
+    console.error('[ERROR] Exception while searching for user:', e);
     return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
   }
 
   if (!user) {
+    console.log('[DEBUG] User not found with email:', email);
     // Respuesta genérica para no revelar si el email existe
     return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
   }
 
   // Buscar comités del usuario
+  console.log('[DEBUG] Searching for committees of user:', user.id);
   const { data: memberships, error: memberError } = await supabase
     .from('committee_users')
     .select('committee_id')
     .eq('user_id', user.id)
     .eq('status', 'active');
 
+  if (memberError) {
+    console.error('[ERROR] Failed to fetch committee memberships:', memberError);
+  }
+
   if (memberError || !memberships || memberships.length === 0) {
+    console.log('[DEBUG] User has no active committee memberships');
     return err('auth/no-committees', 'Si el correo está registrado, recibirás instrucciones.');
   }
+
+  console.log('[DEBUG] User has', memberships.length, 'committee memberships');
 
   // Si el usuario solo pertenece a un comité, registrar solicitud
   if (memberships.length === 1) {
     const committeeId = (memberships[0] as { committee_id: UUID }).committee_id;
+    console.log('[DEBUG] Creating request for committee:', committeeId);
 
     // Crear solicitud
     const { data: created, error: insertError } = await supabase
@@ -111,6 +134,7 @@ export async function requestPasswordChangeAsGuestAction(
       .single();
 
     if (insertError) {
+      console.error('[ERROR] Failed to create request:', insertError);
       return err(
         'password_change/request-failed',
         insertError.message.includes('unique')
@@ -120,14 +144,17 @@ export async function requestPasswordChangeAsGuestAction(
     }
 
     if (!created) {
+      console.error('[ERROR] Insert succeeded but no result returned');
       return err('password_change/no-result', 'Si el correo está registrado, recibirás instrucciones.');
     }
 
+    console.log('[DEBUG] Request created successfully:', (created as { id: UUID }).id);
     revalidatePasswordPaths();
     return { ok: true, value: { requestId: (created as { id: UUID }).id } };
   }
 
   // Si pertenece a múltiples comités, respuesta genérica (no revelar detalles)
+  console.log('[DEBUG] User has multiple committees, cannot auto-select');
   return err('auth/multiple-committees', 'Si el correo está registrado, recibirás instrucciones.');
 }
 
