@@ -55,6 +55,11 @@ export function ConfigTabs({
   const tabs = canManage ? ALL_TABS : ALL_TABS.filter((t) => t.id !== 'usuarios');
   const [active, setActive] = useState<TabId>('datos');
 
+  // DEBUG
+  if (active === 'cambios') {
+    console.log('DEBUG: canApprovePasswordChanges =', canApprovePasswordChanges);
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div

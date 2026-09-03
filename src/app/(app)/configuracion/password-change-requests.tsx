@@ -78,7 +78,7 @@ function PasswordChangeRequestRow({
       if (result.ok) {
         setTempPassword(result.value.temporaryPassword);
         setShowTempPassword(true);
-        onSuccess?.();
+        // NO recargar automáticamente: dejar que admin copie la contraseña primero
       } else {
         setError(result.error.message);
       }
@@ -128,7 +128,7 @@ function PasswordChangeRequestRow({
       {showTempPassword && tempPassword && (
         <tr className="bg-blue-50 dark:bg-blue-900/20">
           <td colSpan={4} className="px-4 py-4">
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-3">
               <p className="text-sm font-semibold">Contraseña temporal:</p>
               <div className="flex gap-2">
                 <input
@@ -145,6 +145,16 @@ function PasswordChangeRequestRow({
                   className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                 >
                   Copiar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowTempPassword(false);
+                    onSuccess?.();
+                  }}
+                  className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                >
+                  Listo
                 </button>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400">

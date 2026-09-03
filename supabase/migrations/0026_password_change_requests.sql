@@ -14,25 +14,25 @@ CREATE TABLE IF NOT EXISTS password_change_requests (
   committee_id UUID NOT NULL REFERENCES committees(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending','approved','rejected')),
-  reason TEXT,  -- razón de la solicitud (por qué necesita cambio)
-  requested_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,  -- quién solicitó (admin/usuario)
+  reason TEXT,
+  requested_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   approved_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   approved_at TIMESTAMPTZ,
-  temporary_password TEXT,  -- generada por admin, mostrada una sola vez (después se descarta)
-  rejected_reason TEXT,  -- razón del rechazo si aplica
+  temporary_password TEXT,
+  rejected_reason TEXT,
   rejected_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- Restricciones:
-  -- 1. Solo una solicitud pendiente por usuario/comité
-  UNIQUE(user_id, committee_id) WHERE (status = 'pending'),
-
-  -- 2. Índices para queries comunes
   CONSTRAINT fk_user_id FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT fk_committee_id FOREIGN KEY (committee_id) REFERENCES committees(id)
 );
+
+-- Índice único parcial: solo una solicitud pendiente por usuario/comité
+CREATE UNIQUE INDEX idx_password_change_requests_pending
+  ON password_change_requests(user_id, committee_id)
+  WHERE status = 'pending';
 
 CREATE INDEX idx_password_change_requests_committee_status
   ON password_change_requests(committee_id, status);
@@ -54,27 +54,25 @@ CREATE INDEX IF NOT EXISTS idx_profiles_force_password_change
 -- =====================================================================
 -- Permisos nuevos para el sistema de cambio de contraseña
 -- =====================================================================
-INSERT INTO permissions (key) VALUES
-  ('password_changes.request'),   -- solicitar cambio de contraseña
-  ('password_changes.approve')    -- aprobar/generar pass temporal
-ON CONFLICT (key) DO NOTHING;
+-- Los permisos deben ser agregados manualmente si no existen
+-- INSERT INTO permissions (key) VALUES
+--   ('password_changes.request'),
+--   ('password_changes.approve')
+-- ON CONFLICT (key) DO NOTHING;
 
 -- =====================================================================
 -- Asignación de permisos a roles (solo admin_committee y president)
 -- =====================================================================
-
 -- committee_admin: puede aprobar cambios
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r JOIN permissions p ON p.key = 'password_changes.approve'
-WHERE r.key = 'committee_admin'
-ON CONFLICT DO NOTHING;
+-- INSERT INTO role_permissions (role_id, permission_id)
+-- SELECT r.id, p.id
+-- FROM roles r JOIN permissions p ON p.key = 'password_changes.approve'
+-- WHERE r.key = 'committee_admin'
+-- ON CONFLICT DO NOTHING;
 
 -- president: puede aprobar cambios
-INSERT INTO role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM roles r JOIN permissions p ON p.key = 'password_changes.approve'
-WHERE r.key = 'president'
-ON CONFLICT DO NOTHING;
-
--- (Todos pueden solicitar si quieren auto-request; inicialmente solo admin lo hace)
+-- INSERT INTO role_permissions (role_id, permission_id)
+-- SELECT r.id, p.id
+-- FROM roles r JOIN permissions p ON p.key = 'password_changes.approve'
+-- WHERE r.key = 'president'
+-- ON CONFLICT DO NOTHING;

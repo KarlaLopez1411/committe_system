@@ -15,7 +15,9 @@ export function PasswordChangeRequestForm() {
     setSuccess(false);
 
     startTransition(async () => {
+      console.log('[DEBUG] Enviando solicitud de cambio de contraseña...');
       const result = await requestPasswordChangeAction(undefined, reason || undefined);
+      console.log('[DEBUG] Respuesta:', result);
       if (result.ok) {
         setSuccess(true);
         setReason('');

@@ -71,6 +71,15 @@ export async function resolvePagePerms(): Promise<PagePerms> {
 
   const manage = can(ctx, 'committee.manage');
   const bonusesManage = can(ctx, 'bonuses.manage') || manage;
+  const canApprove = can(ctx, 'password_changes.approve');
+
+  // DEBUG
+  console.log('[DEBUG page-perms]', {
+    userId: ctx.userId,
+    committeeId: ctx.committeeId,
+    permissions: ctx.permissions,
+    canApprove,
+  });
 
   return {
     canManageCommittee: manage,
@@ -87,6 +96,6 @@ export async function resolvePagePerms(): Promise<PagePerms> {
     canApproveCashClosing: can(ctx, 'cash_closings.approve') || manage,
     canCloseCashClosing: can(ctx, 'cash_closings.close') || manage,
     canCreateActivity: manage || can(ctx, 'transactions.create'),
-    canApprovePasswordChanges: can(ctx, 'password_changes.approve'),
+    canApprovePasswordChanges: canApprove,
   };
 }
