@@ -7,7 +7,11 @@ import type { UUID } from '@/domain/types';
 import {
   updateMemberAction,
   deleteMemberAction,
+  linkMemberUserAction,
+  unlinkMemberUserAction,
+  listAssignableUsersAction,
 } from '@/server/actions/member-actions';
+import type { AssignableUser } from '@/server/member-service';
 import { EditIcon, TrashIcon } from '@/components/ui/icons';
 
 import type { MemberRow } from './miembros-tabs';
@@ -23,7 +27,17 @@ const STATUS_OPTIONS = [
  * editar datos básicos (modal) y eliminar. Solo se muestran a usuarios con el
  * permiso `members.update` (el gating lo aplica el llamador vía `canManage`).
  */
-export function MemberActions({ member }: { member: MemberRow }) {
+export function MemberActions({
+  member,
+  linkedUserId,
+  canManageUsers,
+}: {
+  member: MemberRow;
+  /** userId ya vinculado al miembro (si existe). */
+  linkedUserId: string | null;
+  /** users.manage: habilita el picker "Usuario vinculado" en el modal. */
+  canManageUsers: boolean;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -72,13 +86,35 @@ export function MemberActions({ member }: { member: MemberRow }) {
       {editing ? (
         <EditMemberModal
           member={member}
+          linkedUserId={linkedUserId}
+          canManageUsers={canManageUsers}
           pending={isPending}
           onClose={() => setEditing(false)}
-          onSave={(data) => {
+          onSave={async ({ data, selectedUserId }) => {
             setError(null);
             startTransition(async () => {
               const result = await updateMemberAction(member.id as UUID, data);
               if (!result.ok) { setError(result.error.message); return; }
+
+              // Sincroniza el vínculo con usuario si el permiso está habilitado
+              // y el valor cambió. Se ejecuta después del update para no perder
+              // los cambios del formulario si el vínculo falla.
+              if (canManageUsers && selectedUserId !== linkedUserId) {
+                if (selectedUserId === null) {
+                  const r = await unlinkMemberUserAction(member.id as UUID);
+                  if (!r.ok) { setError(r.error.message); return; }
+                } else if (linkedUserId && selectedUserId !== linkedUserId) {
+                  // Cambiar de un usuario a otro: primero desvincular, luego vincular.
+                  const r1 = await unlinkMemberUserAction(member.id as UUID);
+                  if (!r1.ok) { setError(r1.error.message); return; }
+                  const r2 = await linkMemberUserAction(member.id as UUID, selectedUserId as UUID);
+                  if (!r2.ok) { setError(r2.error.message); return; }
+                } else {
+                  const r = await linkMemberUserAction(member.id as UUID, selectedUserId as UUID);
+                  if (!r.ok) { setError(r.error.message); return; }
+                }
+              }
+
               setEditing(false);
               router.refresh();
             });
@@ -101,14 +137,18 @@ interface EditData {
 
 function EditMemberModal({
   member,
+  linkedUserId,
+  canManageUsers,
   pending,
   onClose,
   onSave,
 }: {
   member: MemberRow;
+  linkedUserId: string | null;
+  canManageUsers: boolean;
   pending: boolean;
   onClose: () => void;
-  onSave: (data: EditData) => void;
+  onSave: (payload: { data: EditData; selectedUserId: string | null }) => void;
 }) {
   const [fullName, setFullName] = useState(member.full_name);
   const [phone, setPhone] = useState(member.phone ?? '');
@@ -117,6 +157,10 @@ function EditMemberModal({
   const [status, setStatus] = useState(member.status);
   const [commitment, setCommitment] = useState(Boolean(member.monthly_commitment));
   const [amount, setAmount] = useState(String(member.monthly_amount ?? '100'));
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(linkedUserId);
+  const [assignable, setAssignable] = useState<AssignableUser[] | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
@@ -124,16 +168,34 @@ function EditMemberModal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  // Carga la lista de usuarios elegibles solo si el permiso está habilitado.
+  useEffect(() => {
+    if (!canManageUsers) return;
+    let cancelled = false;
+    setLoadingUsers(true);
+    setUsersError(null);
+    listAssignableUsersAction(member.id as UUID).then((r) => {
+      if (cancelled) return;
+      if (r.ok) setAssignable(r.value);
+      else setUsersError(r.error.message);
+      setLoadingUsers(false);
+    });
+    return () => { cancelled = true; };
+  }, [canManageUsers, member.id]);
+
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     onSave({
-      fullName,
-      phone: phone.trim() || null,
-      position: position.trim() || null,
-      notes: notes.trim() || null,
-      status,
-      monthlyCommitment: commitment,
-      monthlyAmount: amount,
+      data: {
+        fullName,
+        phone: phone.trim() || null,
+        position: position.trim() || null,
+        notes: notes.trim() || null,
+        status,
+        monthlyCommitment: commitment,
+        monthlyAmount: amount,
+      },
+      selectedUserId,
     });
   }
 
@@ -206,6 +268,34 @@ function EditMemberModal({
               ))}
             </select>
           </label>
+
+          {canManageUsers ? (
+            <label className="flex flex-col gap-1 text-sm font-medium">
+              Usuario vinculado <span className="font-normal text-gray-400">(opcional)</span>
+              <select
+                value={selectedUserId ?? ''}
+                onChange={(e) => setSelectedUserId(e.target.value ? e.target.value : null)}
+                disabled={pending || loadingUsers}
+                className="min-h-touch w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-base disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
+              >
+                <option value="">Click para ligar usuario</option>
+                {(assignable ?? []).map((u) => (
+                  <option key={u.userId} value={u.userId}>
+                    {(u.fullName ?? u.email ?? u.userId) + (u.email && u.fullName ? ` — ${u.email}` : '')}
+                  </option>
+                ))}
+              </select>
+              {loadingUsers ? (
+                <span className="text-xs text-gray-500">Cargando usuarios…</span>
+              ) : null}
+              {usersError ? (
+                <span role="alert" className="text-xs text-red-600">{usersError}</span>
+              ) : null}
+              {!loadingUsers && !usersError && (assignable?.length ?? 0) === 0 ? (
+                <span className="text-xs text-gray-500">No hay usuarios disponibles para vincular.</span>
+              ) : null}
+            </label>
+          ) : null}
 
           <label className="flex items-center gap-2 text-sm font-medium">
             <input

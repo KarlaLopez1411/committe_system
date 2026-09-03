@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import type { Ctx, Result, UUID } from '@/domain/types';
 import { err } from '@/domain/types';
 
-import { createMemberService, type MemberInput } from '@/server/member-service';
+import { createMemberService, type MemberInput, type AssignableUser } from '@/server/member-service';
 import { resolveActionCtx } from '@/server/actions/resolve-ctx';
 
 /**
@@ -81,6 +81,30 @@ export async function linkMemberUserAction(
     revalidateMemberPaths();
   }
   return result;
+}
+
+/**
+ * Server Action: desvincula al usuario actualmente asignado al miembro
+ * indicado (users.manage). Idempotente si no hay ningún usuario vinculado.
+ */
+export async function unlinkMemberUserAction(memberId: UUID): Promise<Result<void>> {
+  const ctx = await resolveCtx();
+  if (!ctx) return unauthenticated();
+  const result = await createMemberService().unlinkUser(ctx, memberId);
+  if (result.ok) revalidateMemberPaths();
+  return result;
+}
+
+/**
+ * Server Action: lista los usuarios elegibles para vincular al miembro
+ * indicado (sin miembro asignado, más el que ya lo esté). Requiere `users.manage`.
+ */
+export async function listAssignableUsersAction(
+  memberId: UUID,
+): Promise<Result<AssignableUser[]>> {
+  const ctx = await resolveCtx();
+  if (!ctx) return unauthenticated();
+  return createMemberService().listAssignableUsers(ctx, memberId);
 }
 
 /** Server Action: edita los datos básicos de un miembro (members.update). */

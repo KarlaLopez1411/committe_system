@@ -162,9 +162,25 @@ export function validateMemberNotes(notes: unknown): Result<string | null> {
 
 // ── Contrato del servicio ─────────────────────────────────────────────────────
 
+/** Usuario del comité elegible para vincular a un miembro. */
+export interface AssignableUser {
+  userId: UUID;
+  fullName: string | null;
+  email: string | null;
+  /** true si este usuario ya está vinculado al miembro consultado. */
+  currentlyLinked: boolean;
+}
+
 export interface MemberService {
   register(ctx: Ctx, data: MemberInput): Promise<Result<{ memberId: UUID }>>;
   linkUser(ctx: Ctx, memberId: UUID, userId: UUID): Promise<Result<void>>;
+  /** Desvincula al usuario actualmente asignado al miembro (member_id = NULL). */
+  unlinkUser(ctx: Ctx, memberId: UUID): Promise<Result<void>>;
+  /**
+   * Lista los usuarios del comité que pueden vincularse al miembro indicado:
+   * usuarios sin miembro asignado, más el usuario actualmente vinculado (si lo hay).
+   */
+  listAssignableUsers(ctx: Ctx, memberId: UUID): Promise<Result<AssignableUser[]>>;
   /** Edita los datos básicos de un miembro (nombre, teléfono, cargo, notas, compromiso, estado). */
   update(ctx: Ctx, memberId: UUID, data: MemberInput): Promise<Result<void>>;
   /** Cambia el estado de un miembro (activo/inactivo/baja). */
@@ -339,6 +355,153 @@ export function createMemberService(deps: MemberServiceDeps = {}): MemberService
       });
 
       return ok(undefined);
+    },
+
+    /**
+     * Desvincula al usuario actualmente asignado al miembro dentro del comité
+     * activo (pone `committee_users.member_id = NULL`). Idempotente: si no hay
+     * ningún usuario vinculado, resuelve con éxito sin cambios. Requiere el
+     * permiso `users.manage`.
+     */
+    async unlinkUser(ctx, memberId): Promise<Result<void>> {
+      if (!can(ctx, 'users.manage')) {
+        return err('AUTHZ_FORBIDDEN', 'No tiene permiso para desvincular usuarios de miembros.');
+      }
+
+      try {
+        await assertCommitteeAccess(ctx, ctx.committeeId);
+      } catch {
+        return err('AUTHZ_FORBIDDEN', 'Acceso no autorizado al comité solicitado.');
+      }
+
+      const client = getClient();
+
+      const { data: current, error: readError } = await client
+        .from('committee_users')
+        .select('id, user_id')
+        .eq('committee_id', ctx.committeeId)
+        .eq('member_id', memberId)
+        .maybeSingle();
+
+      if (readError) {
+        return err(
+          'member/unlink-read-failed',
+          `No se pudo verificar el vínculo del miembro: ${readError.message}.`,
+        );
+      }
+      if (!current) {
+        // Nada que desvincular: operación idempotente.
+        return ok(undefined);
+      }
+
+      const membershipId = (current as { id: UUID }).id;
+      const previousUserId = (current as { user_id: UUID }).user_id;
+
+      const { error: updateError } = await client
+        .from('committee_users')
+        .update({ member_id: null })
+        .eq('id', membershipId);
+
+      if (updateError) {
+        return err(
+          'member/unlink-failed',
+          `No se pudo desvincular al usuario del miembro: ${updateError.message}.`,
+        );
+      }
+
+      await recordAudit(client, {
+        committeeId: ctx.committeeId,
+        userId: ctx.userId,
+        action: 'member.unlink_user',
+        entityId: memberId,
+        oldValues: { member_id: memberId, user_id: previousUserId },
+      });
+
+      return ok(undefined);
+    },
+
+    /**
+     * Lista los usuarios del comité activo que pueden vincularse al miembro
+     * indicado: usuarios ACTIVOS sin miembro asignado, más el usuario que ya
+     * esté vinculado a este miembro (para permitir que el picker lo muestre
+     * como seleccionado). Requiere el permiso `users.manage`.
+     */
+    async listAssignableUsers(ctx, memberId): Promise<Result<AssignableUser[]>> {
+      if (!can(ctx, 'users.manage')) {
+        return err(
+          'AUTHZ_FORBIDDEN',
+          'No tiene permiso para consultar los usuarios asignables.',
+        );
+      }
+      try {
+        await assertCommitteeAccess(ctx, ctx.committeeId);
+      } catch {
+        return err('AUTHZ_FORBIDDEN', 'Acceso no autorizado al comité solicitado.');
+      }
+
+      const client = getClient();
+
+      const { data: rows, error } = await client
+        .from('committee_users')
+        .select('user_id, member_id, status')
+        .eq('committee_id', ctx.committeeId)
+        .eq('status', 'active');
+
+      if (error) {
+        return err(
+          'users/list-failed',
+          `No se pudieron listar los usuarios: ${error.message}.`,
+        );
+      }
+
+      const memberships = (rows ?? []) as {
+        user_id: UUID;
+        member_id: UUID | null;
+        status: string;
+      }[];
+
+      // Elegibles: sin miembro asignado, o el que ya está vinculado a este miembro.
+      const eligible = memberships.filter(
+        (m) => m.member_id === null || m.member_id === memberId,
+      );
+      if (eligible.length === 0) return ok([]);
+
+      const userIds = eligible.map((m) => m.user_id);
+
+      const { data: profiles } = await client
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+      const nameById = new Map<string, string | null>(
+        ((profiles ?? []) as { id: UUID; full_name: string | null }[]).map((p) => [
+          p.id,
+          p.full_name,
+        ]),
+      );
+
+      const emailById = new Map<string, string | null>();
+      try {
+        const { data: authList } = await client.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000,
+        });
+        for (const u of authList?.users ?? []) {
+          if (userIds.includes(u.id as UUID)) emailById.set(u.id, u.email ?? null);
+        }
+      } catch {
+        // Si no se puede leer auth.users, se omite el correo (no bloquea).
+      }
+
+      const result: AssignableUser[] = eligible.map((m) => ({
+        userId: m.user_id,
+        fullName: nameById.get(m.user_id) ?? null,
+        email: emailById.get(m.user_id) ?? null,
+        currentlyLinked: m.member_id === memberId,
+      }));
+      result.sort((a, b) =>
+        (a.fullName ?? a.email ?? '').localeCompare(b.fullName ?? b.email ?? ''),
+      );
+      return ok(result);
     },
 
     /**
