@@ -21,6 +21,8 @@ export interface PagePerms {
   canCreateMember: boolean;
   /** members.update */
   canUpdateMember: boolean;
+  /** users.manage */
+  canManageUsers: boolean;
   /** bonuses.manage || committee.manage */
   canManageBonuses: boolean;
   /** bonuses.collect || bonuses.manage || committee.manage */
@@ -45,6 +47,7 @@ const NONE: PagePerms = {
   canCreateTransaction: false,
   canCreateMember: false,
   canUpdateMember: false,
+  canManageUsers: false,
   canManageBonuses: false,
   canCollectBonuses: false,
   canDrawBonuses: false,
@@ -68,6 +71,7 @@ export async function resolvePagePerms(): Promise<PagePerms> {
     canCreateTransaction: can(ctx, 'transactions.create'),
     canCreateMember: can(ctx, 'members.create'),
     canUpdateMember: can(ctx, 'members.update'),
+    canManageUsers: can(ctx, 'users.manage'),
     canManageBonuses: bonusesManage,
     canCollectBonuses: can(ctx, 'bonuses.collect') || bonusesManage,
     canDrawBonuses: can(ctx, 'bonuses.draw') || bonusesManage,

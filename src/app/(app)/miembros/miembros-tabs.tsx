@@ -77,13 +77,17 @@ function Pager({ page, pageCount, onPage }: { page: number; pageCount: number; o
  */
 export function MiembrosTabs({
   members,
+  linkedUserByMember,
   contributionPeriods,
   memberOptions,
   canCreateMember,
   canCreateContribution,
   canUpdateMember,
+  canManageUsers,
 }: {
   members: MemberRow[];
+  /** memberId → userId ya vinculado en `committee_users` (si existe). */
+  linkedUserByMember: Record<string, string>;
   contributionPeriods: ContributionPeriod[];
   memberOptions: MemberOption[];
   /** members.create: dar de alta miembros. */
@@ -92,6 +96,8 @@ export function MiembrosTabs({
   canCreateContribution: boolean;
   /** members.update: editar, cambiar estado y eliminar miembros. */
   canUpdateMember: boolean;
+  /** users.manage: vincular/desvincular usuarios a miembros. */
+  canManageUsers: boolean;
 }) {
   const [active, setActive] = useState<TabId>('miembros');
   const [memberPage, setMemberPage] = useState(1);
@@ -144,15 +150,29 @@ export function MiembrosTabs({
                       </div>
                     </div>
                     <div className="flex flex-col items-start gap-2 sm:items-end">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.className}`}>{meta.label}</span>
+                        {linkedUserByMember[m.id] ? (
+                          <span
+                            title="Este miembro tiene un usuario del sistema vinculado"
+                            className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                          >
+                            <span aria-hidden="true">👤</span> Con usuario
+                          </span>
+                        ) : null}
                         {m.monthly_commitment ? (
                           <span className="inline-flex items-center rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand">
                             Comprometido ${String(m.monthly_amount ?? '100')}
                           </span>
                         ) : null}
                       </div>
-                      {canUpdateMember ? <MemberActions member={m} /> : null}
+                      {canUpdateMember ? (
+                        <MemberActions
+                          member={m}
+                          linkedUserId={linkedUserByMember[m.id] ?? null}
+                          canManageUsers={canManageUsers}
+                        />
+                      ) : null}
                     </div>
                   </li>
                 );

@@ -37,6 +37,24 @@ export default async function MembersPage() {
   const members = (membersRes.data ?? []) as MemberRow[];
   const memberName = new Map(members.map((m) => [m.id, m.full_name]));
 
+  // Vínculos usuario↔miembro del comité activo. Se usa tanto para mostrar el
+  // badge "Con usuario" en la lista como para prellenar el picker del modal de
+  // editar miembro. RLS limita al comité del usuario.
+  let linkedUserByMember = new Map<string, string>();
+  if (members.length > 0) {
+    const memberIds = members.map((m) => m.id);
+    const { data: links } = await supabase
+      .from('committee_users')
+      .select('user_id, member_id')
+      .in('member_id', memberIds);
+    linkedUserByMember = new Map(
+      ((links ?? []) as { user_id: string; member_id: string }[]).map((l) => [
+        l.member_id,
+        l.user_id,
+      ]),
+    );
+  }
+
   const rawContributions = (contribRes.data ?? []) as {
     id: string; member_id: string; period: string; status: string; amount: string | null;
   }[];
@@ -98,11 +116,13 @@ export default async function MembersPage() {
       <h1 className="text-xl font-bold">Miembros</h1>
       <MiembrosTabs
         members={members}
+        linkedUserByMember={Object.fromEntries(linkedUserByMember)}
         contributionPeriods={periods}
         memberOptions={memberOptions}
         canCreateMember={perms.canCreateMember}
         canCreateContribution={perms.canCreateTransaction}
         canUpdateMember={perms.canUpdateMember}
+        canManageUsers={perms.canManageUsers}
       />
     </section>
   );
