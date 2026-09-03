@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Ctx, Result, UUID } from '@/domain/types';
@@ -260,14 +260,15 @@ export function createPasswordChangeService(
         );
       }
 
-      // Actualizar solicitud: approved y guardar contraseña temporal (para poder mostrarla si es necesario)
+      // Actualizar solicitud: approved y guardar contraseña temporal ENCRIPTADA
+      const encryptedPassword = encryptTemporaryPassword(tempPassword);
       const { error: updateError } = await client
         .from('password_change_requests')
         .update({
           status: 'approved',
           approved_by: ctx.userId,
           approved_at: new Date().toISOString(),
-          temporary_password: tempPassword,  // Guardar para poder mostrarla de nuevo
+          temporary_password: encryptedPassword,  // Guardar ENCRIPTADA
         })
         .eq('id', requestId);
 
@@ -453,7 +454,7 @@ export function createPasswordChangeService(
         approvedBy: r.approved_by ?? undefined,
         rejectedAt: r.rejected_at ?? undefined,
         rejectedReason: r.rejected_reason ?? undefined,
-        temporaryPassword: r.temporary_password ?? undefined,
+        temporaryPassword: r.temporary_password ? decryptTemporaryPassword(r.temporary_password) ?? undefined : undefined,
       }));
 
       return ok(result);
@@ -543,7 +544,7 @@ export function createPasswordChangeService(
         approvedBy: r.approved_by ?? undefined,
         rejectedAt: r.rejected_at ?? undefined,
         rejectedReason: r.rejected_reason ?? undefined,
-        temporaryPassword: r.temporary_password ?? undefined,
+        temporaryPassword: r.temporary_password ? decryptTemporaryPassword(r.temporary_password) ?? undefined : undefined,
       }));
 
       return ok(result);
@@ -616,17 +617,39 @@ export function createPasswordChangeService(
 // ── Utilidades ───────────────────────────────────────────────────────────
 
 /**
- * Genera contraseña temporal: 12 caracteres (letras mayúsculas, minúsculas, números, símbolos).
- * Base64 truncado da entropía suficiente para ser seguro (mínimo 70+ bits).
+ * Genera contraseña temporal: 12 caracteres con mayúscula, minúscula, número, símbolo.
+ * Formato: 4 mayúsculas aleatorias + 4 minúsculas + 2 números + 2 símbolos = 12 caracteres.
  */
 function generateTemporaryPassword(): string {
-  const bytes = randomBytes(12);
-  // Base64 (3 bytes → 4 chars) → 12 bytes → 16 chars base64
-  const base64 = bytes.toString('base64')
-    .replace(/\+/g, '!')    // + → !
-    .replace(/\//g, '#')    // / → #
-    .replace(/=/g, '@');    // = → @
-  return base64.slice(0, 12);
+  const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+  const numbers = '0123456789';
+  const symbols = '!@#$%^&*';
+
+  let password = '';
+
+  // 4 mayúsculas
+  for (let i = 0; i < 4; i++) {
+    password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+  }
+
+  // 4 minúsculas
+  for (let i = 0; i < 4; i++) {
+    password += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+  }
+
+  // 2 números
+  for (let i = 0; i < 2; i++) {
+    password += numbers.charAt(Math.floor(Math.random() * numbers.length));
+  }
+
+  // 2 símbolos
+  for (let i = 0; i < 2; i++) {
+    password += symbols.charAt(Math.floor(Math.random() * symbols.length));
+  }
+
+  // Mezclar (shuffle) para que no sea predecible
+  return password.split('').sort(() => Math.random() - 0.5).join('');
 }
 
 /**
@@ -659,7 +682,65 @@ function validatePassword(password: unknown): Result<void> {
   return ok(undefined);
 }
 
-// ── Auditoría ────────────────────────────────────────────────────────────
+// ── Encriptación de contraseñas temporales ────────────────────────────────
+
+/**
+ * Encripta contraseña temporal con AES-256-GCM.
+ * Retorna: `iv:encryptedData:authTag` en base64 para almacenamiento en BD.
+ */
+function encryptTemporaryPassword(password: string): string {
+  const key = Buffer.from(
+    process.env.PASSWORD_ENCRYPTION_KEY || 'default-key-change-in-production-please-do-not-use-this',
+    'utf-8'
+  );
+
+  // Asegurar que la clave tiene 32 bytes (256 bits)
+  const keyHash = require('crypto').createHash('sha256').update(key).digest();
+
+  const iv = randomBytes(16);
+  const cipher = createCipheriv('aes-256-gcm', keyHash, iv);
+
+  let encrypted = cipher.update(password, 'utf-8', 'hex');
+  encrypted += cipher.final('hex');
+
+  const authTag = cipher.getAuthTag();
+
+  // Formato: iv:encrypted:authTag (todo en base64 para almacenamiento seguro en BD)
+  return `${iv.toString('base64')}:${encrypted}:${authTag.toString('base64')}`;
+}
+
+/**
+ * Desencripta contraseña temporal.
+ */
+function decryptTemporaryPassword(encrypted: string | undefined | null): string | null {
+  if (!encrypted) return null;
+
+  try {
+    const key = Buffer.from(
+      process.env.PASSWORD_ENCRYPTION_KEY || 'default-key-change-in-production-please-do-not-use-this',
+      'utf-8'
+    );
+
+    const keyHash = require('crypto').createHash('sha256').update(key).digest();
+    const parts = encrypted.split(':');
+
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;
+
+    const iv = Buffer.from(parts[0]!, 'base64');
+    const encryptedData = parts[1]!;
+    const authTag = Buffer.from(parts[2]!, 'base64');
+
+    const decipher = createDecipheriv('aes-256-gcm', keyHash, iv);
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf-8');
+    decrypted += decipher.final('utf-8');
+
+    return decrypted;
+  } catch {
+    return null;
+  }
+}
 
 interface AuditInput {
   committeeId: UUID;
