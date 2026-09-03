@@ -37,6 +37,7 @@ export function ConfigTabs({
   users,
   roles,
   passwordChanges,
+  canApprovePasswordChanges,
   usersError,
   canManage,
 }: {
@@ -45,6 +46,7 @@ export function ConfigTabs({
   users: CommitteeUserRow[];
   roles: RoleOption[];
   passwordChanges: Array<{ id: UUID; userName: string | null; reason?: string; requestedAt: string }>;
+  canApprovePasswordChanges: boolean;
   usersError: string | null;
   /** committee.manage: editar datos y gestionar usuarios. */
   canManage: boolean;
@@ -94,12 +96,11 @@ export function ConfigTabs({
       ) : null}
 
       {active === 'cambios' ? (
-        <div className="flex flex-col gap-6">
+        canApprovePasswordChanges ? (
+          <PasswordChangeRequestsTable requests={passwordChanges} />
+        ) : (
           <PasswordChangeRequestForm />
-          {passwordChanges.length > 0 && (
-            <PasswordChangeRequestsTable requests={passwordChanges} />
-          )}
-        </div>
+        )
       ) : null}
     </div>
   );
