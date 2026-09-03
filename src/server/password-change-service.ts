@@ -38,7 +38,7 @@ export interface PasswordChangeRequest {
   approvedByName?: string;
   rejectedAt?: string;
   rejectedReason?: string;
-  temporaryPassword?: string; // solo en aprobación, nunca almacenado
+  temporaryPassword?: string; // solo si está aprobada y se guardo
 }
 
 export interface PasswordChangeServiceDeps {
@@ -260,15 +260,14 @@ export function createPasswordChangeService(
         );
       }
 
-      // Actualizar solicitud: approved
+      // Actualizar solicitud: approved y guardar contraseña temporal (para poder mostrarla si es necesario)
       const { error: updateError } = await client
         .from('password_change_requests')
         .update({
           status: 'approved',
           approved_by: ctx.userId,
           approved_at: new Date().toISOString(),
-          // NO almacenar temporary_password en la BD (solo mostrar al admin una vez)
-          temporary_password: null,
+          temporary_password: tempPassword,  // Guardar para poder mostrarla de nuevo
         })
         .eq('id', requestId);
 
@@ -398,7 +397,8 @@ export function createPasswordChangeService(
           approved_at,
           approved_by,
           rejected_at,
-          rejected_reason
+          rejected_reason,
+          temporary_password
         `)
         .eq('committee_id', ctx.committeeId)
         .order('requested_at', { ascending: false });
@@ -421,6 +421,7 @@ export function createPasswordChangeService(
         approved_by: UUID | null;
         rejected_at: string | null;
         rejected_reason: string | null;
+        temporary_password: string | null;
       }>;
 
       if (requests_.length === 0) {
@@ -452,6 +453,7 @@ export function createPasswordChangeService(
         approvedBy: r.approved_by ?? undefined,
         rejectedAt: r.rejected_at ?? undefined,
         rejectedReason: r.rejected_reason ?? undefined,
+        temporaryPassword: r.temporary_password ?? undefined,
       }));
 
       return ok(result);
@@ -508,6 +510,7 @@ export function createPasswordChangeService(
         approved_by: UUID | null;
         rejected_at: string | null;
         rejected_reason: string | null;
+        temporary_password: string | null;
       }>;
 
       if (requests_.length === 0) {
@@ -540,6 +543,7 @@ export function createPasswordChangeService(
         approvedBy: r.approved_by ?? undefined,
         rejectedAt: r.rejected_at ?? undefined,
         rejectedReason: r.rejected_reason ?? undefined,
+        temporaryPassword: r.temporary_password ?? undefined,
       }));
 
       return ok(result);

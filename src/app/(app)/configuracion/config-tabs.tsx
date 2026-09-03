@@ -55,6 +55,7 @@ export function ConfigTabs({
     rejectedReason?: string;
     passwordChangedAt?: string;
     temporaryPasswordUsedAt?: string;
+    temporaryPassword?: string;
   }>;
   canApprovePasswordChanges: boolean;
   usersError: string | null;

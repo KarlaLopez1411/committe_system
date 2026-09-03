@@ -17,6 +17,7 @@ interface PasswordChangeRequestProps {
   rejectedReason?: string;
   passwordChangedAt?: string;
   temporaryPasswordUsedAt?: string;
+  temporaryPassword?: string;
   onSuccess?: () => void;
 }
 
@@ -36,6 +37,7 @@ export function PasswordChangeRequestsTable({
     rejectedReason?: string;
     passwordChangedAt?: string;
     temporaryPasswordUsedAt?: string;
+    temporaryPassword?: string;
   }>;
   onRefresh?: () => void;
 }) {
@@ -83,6 +85,7 @@ export function PasswordChangeRequestsTable({
                     rejectedReason={req.rejectedReason}
                     passwordChangedAt={req.passwordChangedAt}
                     temporaryPasswordUsedAt={req.temporaryPasswordUsedAt}
+                    temporaryPassword={req.temporaryPassword}
                     onSuccess={onRefresh}
                   />
                 ))}
@@ -138,6 +141,7 @@ function PasswordChangeRequestRow({
   rejectedReason,
   passwordChangedAt,
   temporaryPasswordUsedAt,
+  temporaryPassword,
   onSuccess,
 }: PasswordChangeRequestProps) {
   const [isPending, startTransition] = useTransition();
@@ -218,14 +222,25 @@ function PasswordChangeRequestRow({
             </div>
           )}
           {status === 'approved' && (
-            <div className="flex flex-col gap-1 text-xs">
-              <p className="text-gray-600 dark:text-gray-400">
-                {temporaryPasswordUsedAt ? '✓ Usada' : '— Pendiente uso'}
-              </p>
-              {passwordChangedAt && (
-                <p className="text-green-600 dark:text-green-400">
-                  ✓ Cambiada: {new Date(passwordChangedAt).toLocaleDateString()}
+            <div className="flex flex-col gap-2 text-xs">
+              <div className="flex flex-col gap-1">
+                <p className="text-gray-600 dark:text-gray-400">
+                  {temporaryPasswordUsedAt ? '✓ Usada' : '— Pendiente uso'}
                 </p>
+                {passwordChangedAt && (
+                  <p className="text-green-600 dark:text-green-400">
+                    ✓ Cambiada: {new Date(passwordChangedAt).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+              {temporaryPassword && (
+                <button
+                  type="button"
+                  onClick={() => setShowTempPassword(true)}
+                  className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60"
+                >
+                  Ver contraseña
+                </button>
               )}
             </div>
           )}
@@ -236,7 +251,7 @@ function PasswordChangeRequestRow({
           )}
         </td>
       </tr>
-      {showTempPassword && tempPassword && (
+      {showTempPassword && (tempPassword || temporaryPassword) && (
         <tr className="bg-blue-50 dark:bg-blue-900/20">
           <td colSpan={5} className="px-4 py-4">
             <div className="flex flex-col gap-3">
@@ -244,14 +259,14 @@ function PasswordChangeRequestRow({
               <div className="flex gap-2">
                 <input
                   type="text"
-                  value={tempPassword}
+                  value={tempPassword || temporaryPassword || ''}
                   readOnly
                   className="flex-1 px-3 py-2 bg-white border border-blue-300 rounded font-mono text-sm dark:bg-gray-800 dark:border-blue-700"
                 />
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(tempPassword);
+                    navigator.clipboard.writeText(tempPassword || temporaryPassword || '');
                   }}
                   className="px-3 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                 >
@@ -261,11 +276,11 @@ function PasswordChangeRequestRow({
                   type="button"
                   onClick={() => {
                     setShowTempPassword(false);
-                    onSuccess?.();
+                    if (!tempPassword) onSuccess?.();
                   }}
                   className="px-3 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
                 >
-                  Listo
+                  Cerrar
                 </button>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400">
