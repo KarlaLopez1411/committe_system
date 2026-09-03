@@ -585,10 +585,13 @@ export function createPasswordChangeService(
         console.error('No se pudo limpiar force_password_change:', profileError.message);
       }
 
-      // Registrar cuándo se cambió la contraseña
+      // Registrar cuándo se cambió la contraseña y limpiar la temporal
       const { error: updateError } = await client
         .from('password_change_requests')
-        .update({ password_changed_at: new Date().toISOString() })
+        .update({
+          password_changed_at: new Date().toISOString(),
+          temporary_password: null,
+        })
         .eq('user_id', ctx.userId)
         .eq('committee_id', ctx.committeeId)
         .eq('status', 'approved');
