@@ -3,8 +3,12 @@ import {
   listCommitteeUsersAction,
   listRolesAction,
 } from '@/server/actions/role-actions';
+<<<<<<< HEAD
 import { resolvePagePerms } from '@/server/actions/page-perms';
 import { listPendingPasswordChangesAction } from '@/server/actions/password-change-actions';
+=======
+import { listAllPasswordChangesAction } from '@/server/actions/password-change-actions';
+>>>>>>> ff6bd29cb6d5 (Agregar historial completo de solicitudes con paginación)
 import { resolvePagePerms } from '@/server/actions/page-perms';
 
 import { ConfigTabs } from './config-tabs';
@@ -55,7 +59,7 @@ export default async function ConfigurationPage() {
   const [usersResult, rolesResult, passwordChangesResult, permsResult] = await Promise.all([
     listCommitteeUsersAction(),
     listRolesAction(),
-    listPendingPasswordChangesAction(),
+    listAllPasswordChangesAction(),
     resolvePagePerms(),
   ]);
 

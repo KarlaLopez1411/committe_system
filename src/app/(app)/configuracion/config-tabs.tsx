@@ -45,7 +45,15 @@ export function ConfigTabs({
   code: string | null;
   users: CommitteeUserRow[];
   roles: RoleOption[];
-  passwordChanges: Array<{ id: UUID; userName: string | null; reason?: string; requestedAt: string }>;
+  passwordChanges: Array<{
+    id: UUID;
+    userName: string | null;
+    status: string;
+    reason?: string;
+    requestedAt: string;
+    approvedAt?: string;
+    rejectedReason?: string;
+  }>;
   canApprovePasswordChanges: boolean;
   usersError: string | null;
   /** committee.manage: editar datos y gestionar usuarios. */

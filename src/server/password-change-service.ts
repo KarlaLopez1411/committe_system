@@ -68,6 +68,9 @@ export interface PasswordChangeService {
     reason?: string,
   ): Promise<Result<void>>;
 
+  /** Admin lista TODAS las solicitudes (historial completo). */
+  listAllRequests(ctx: Ctx): Promise<Result<PasswordChangeRequest[]>>;
+
   /** Admin lista solicitudes pendientes del comité activo. */
   listPendingRequests(ctx: Ctx): Promise<Result<PasswordChangeRequest[]>>;
 
@@ -368,6 +371,90 @@ export function createPasswordChangeService(
       });
 
       return ok(undefined);
+    },
+
+    /**
+     * Admin lista TODAS las solicitudes (historial: pendientes + aprobadas + rechazadas).
+     */
+    async listAllRequests(ctx): Promise<Result<PasswordChangeRequest[]>> {
+      if (!can(ctx, 'password_changes.approve')) {
+        return err(
+          'AUTHZ_FORBIDDEN',
+          'No tiene permiso para consultar solicitudes de cambio.',
+        );
+      }
+
+      const client = getClient();
+
+      const { data: requests, error } = await client
+        .from('password_change_requests')
+        .select(`
+          id,
+          user_id,
+          status,
+          reason,
+          requested_at,
+          requested_by,
+          approved_at,
+          approved_by,
+          rejected_at,
+          rejected_reason
+        `)
+        .eq('committee_id', ctx.committeeId)
+        .order('requested_at', { ascending: false });
+
+      if (error) {
+        return err(
+          'password_change/list-failed',
+          `No se pudieron listar solicitudes: ${error.message}.`,
+        );
+      }
+
+      const requests_ = (requests ?? []) as Array<{
+        id: UUID;
+        user_id: UUID;
+        status: string;
+        reason: string | null;
+        requested_at: string;
+        requested_by: UUID | null;
+        approved_at: string | null;
+        approved_by: UUID | null;
+        rejected_at: string | null;
+        rejected_reason: string | null;
+      }>;
+
+      if (requests_.length === 0) {
+        return ok([]);
+      }
+
+      const userIds = [...new Set(requests_.map((r) => r.user_id))];
+      const { data: profiles } = await client
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      const nameById = new Map<string, string | null>(
+        ((profiles ?? []) as { id: UUID; full_name: string | null }[]).map((p) => [
+          p.id,
+          p.full_name,
+        ]),
+      );
+
+      const result: PasswordChangeRequest[] = requests_.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        userName: nameById.get(r.user_id) ?? null,
+        status: r.status as 'pending' | 'approved' | 'rejected',
+        reason: r.reason ?? undefined,
+        requestedAt: r.requested_at,
+        requestedBy: r.requested_by ?? undefined,
+        approvedAt: r.approved_at ?? undefined,
+        approvedBy: r.approved_by ?? undefined,
+        rejectedAt: r.rejected_at ?? undefined,
+        rejectedReason: r.rejected_reason ?? undefined,
+      }));
+
+      return ok(result);
     },
 
     /**

@@ -58,6 +58,24 @@ export async function rejectPasswordChangeAction(
   return result;
 }
 
+export async function listAllPasswordChangesAction(): Promise<
+  Result<Array<{
+    id: UUID;
+    userId: UUID;
+    userName: string | null;
+    status: string;
+    reason?: string;
+    requestedAt: string;
+    approvedAt?: string;
+    rejectedAt?: string;
+    rejectedReason?: string;
+  }>>
+> {
+  const ctx = await resolveCtx();
+  if (!ctx) return unauthenticated();
+  return createPasswordChangeService().listAllRequests(ctx);
+}
+
 export async function listPendingPasswordChangesAction(): Promise<
   Result<Array<{
     id: UUID;
