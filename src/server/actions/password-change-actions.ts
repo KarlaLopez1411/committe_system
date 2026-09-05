@@ -45,7 +45,7 @@ export async function requestPasswordChangeAsGuestAction(
   email: string,
   reason?: string,
 ): Promise<Result<{ requestId: UUID }>> {
-  console.log('[DEBUG] requestPasswordChangeAsGuestAction called with:', { email, reasonLength: reason?.length });
+  console.log('[DEBUG] requestPasswordChangeAsGuestAction called with:', { email });
 
   if (!email || !email.includes('@')) {
     console.log('[DEBUG] Invalid email format');
@@ -54,108 +54,143 @@ export async function requestPasswordChangeAsGuestAction(
 
   const supabase = await (await import('@/lib/supabase/server')).createSupabaseServerClient();
 
-  // Buscar usuario por email en auth con paginación
-  let user = null;
-  const pageSize = 100;
-
   try {
-    // Iterar por páginas hasta encontrar el usuario o agotar páginas
-    for (let i = 0; i < 10; i++) {
-      console.log(`[DEBUG] Searching for user on page ${i}`);
-      const { data: { users }, error: authError } = await supabase.auth.admin.listUsers({
-        page: i,
-        perPage: pageSize,
-      });
+    // Buscar usuario por email usando RPC de Supabase
+    // Este RPC debe retornar el user_id asociado a un email
+    console.log('[DEBUG] Calling Supabase RPC to find user by email');
 
-      if (authError) {
-        console.error(`[ERROR] Failed to list users on page ${i}:`, authError);
-        return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
+    const { data: userIdResult, error: rpcError } = await supabase.rpc('get_user_id_by_email', {
+      email_input: email.toLowerCase().trim(),
+    });
+
+    if (rpcError) {
+      console.error('[ERROR] RPC call failed:', rpcError);
+      // Fallback: intentar búsqueda directa en auth si el RPC no existe
+      console.log('[DEBUG] RPC not available, trying direct auth lookup with pagination');
+
+      let user = null;
+      for (let i = 0; i < 10; i++) {
+        console.log(`[DEBUG] Searching auth page ${i}`);
+        const { data: { users }, error: authError } = await supabase.auth.admin.listUsers({
+          page: i,
+          perPage: 100,
+        });
+
+        if (authError) {
+          console.error(`[ERROR] Auth lookup failed on page ${i}:`, authError);
+          return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
+        }
+
+        if (!users || users.length === 0) break;
+
+        user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
+        if (user) {
+          console.log('[DEBUG] User found via auth:', { userId: user.id });
+
+          // Buscar comités del usuario
+          const { data: memberships, error: memberError } = await supabase
+            .from('committee_users')
+            .select('committee_id')
+            .eq('user_id', user.id)
+            .eq('status', 'active');
+
+          if (memberError || !memberships || memberships.length === 0) {
+            console.log('[DEBUG] User has no active committees');
+            return err('auth/no-committees', 'Si el correo está registrado, recibirás instrucciones.');
+          }
+
+          if (memberships.length === 1) {
+            const committeeId = (memberships[0] as { committee_id: UUID }).committee_id;
+            return createPasswordRequest(supabase, user.id, committeeId, reason);
+          }
+
+          console.log('[DEBUG] User has multiple committees');
+          return err('auth/multiple-committees', 'Si el correo está registrado, recibirás instrucciones.');
+        }
       }
 
-      if (!users || users.length === 0) {
-        console.log(`[DEBUG] No more users (page ${i} returned 0 users)`);
-        break; // No más usuarios
-      }
-
-      console.log(`[DEBUG] Found ${users.length} users on page ${i}`);
-      user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-      if (user) {
-        console.log('[DEBUG] User found:', { userId: user.id, userEmail: user.email });
-        break;
-      }
+      console.log('[DEBUG] User not found');
+      return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
     }
+
+    const userId = userIdResult as UUID | null;
+    if (!userId) {
+      console.log('[DEBUG] RPC returned no user_id for email:', email);
+      return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
+    }
+
+    console.log('[DEBUG] User found via RPC:', { userId });
+
+    // Buscar comités del usuario
+    const { data: memberships, error: memberError } = await supabase
+      .from('committee_users')
+      .select('committee_id')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+
+    if (memberError || !memberships || memberships.length === 0) {
+      console.log('[DEBUG] User has no active committees');
+      return err('auth/no-committees', 'Si el correo está registrado, recibirás instrucciones.');
+    }
+
+    console.log('[DEBUG] User has', memberships.length, 'committee(s)');
+
+    // Si el usuario solo pertenece a un comité, registrar solicitud
+    if (memberships.length === 1) {
+      const committeeId = (memberships[0] as { committee_id: UUID }).committee_id;
+      return createPasswordRequest(supabase, userId, committeeId, reason);
+    }
+
+    console.log('[DEBUG] User has multiple committees');
+    return err('auth/multiple-committees', 'Si el correo está registrado, recibirás instrucciones.');
   } catch (e) {
-    console.error('[ERROR] Exception while searching for user:', e);
+    console.error('[ERROR] Exception in requestPasswordChangeAsGuestAction:', e);
     return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
   }
+}
 
-  if (!user) {
-    console.log('[DEBUG] User not found with email:', email);
-    // Respuesta genérica para no revelar si el email existe
-    return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
+/**
+ * Helper para crear solicitud de cambio de contraseña.
+ */
+async function createPasswordRequest(
+  supabase: any,
+  userId: UUID,
+  committeeId: UUID,
+  reason?: string,
+): Promise<Result<{ requestId: UUID }>> {
+  console.log('[DEBUG] Creating password request for user:', userId, 'committee:', committeeId);
+
+  const { data: created, error: insertError } = await supabase
+    .from('password_change_requests')
+    .insert({
+      user_id: userId,
+      committee_id: committeeId,
+      status: 'pending',
+      reason: reason?.trim() || null,
+      requested_by: null,
+      requested_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (insertError) {
+    console.error('[ERROR] Failed to create request:', insertError);
+    return err(
+      'password_change/request-failed',
+      insertError.message.includes('unique')
+        ? 'Ya hay una solicitud pendiente para este usuario.'
+        : 'Si el correo está registrado, recibirás instrucciones.',
+    );
   }
 
-  // Buscar comités del usuario
-  console.log('[DEBUG] Searching for committees of user:', user.id);
-  const { data: memberships, error: memberError } = await supabase
-    .from('committee_users')
-    .select('committee_id')
-    .eq('user_id', user.id)
-    .eq('status', 'active');
-
-  if (memberError) {
-    console.error('[ERROR] Failed to fetch committee memberships:', memberError);
+  if (!created) {
+    console.error('[ERROR] Insert succeeded but no result returned');
+    return err('password_change/no-result', 'Si el correo está registrado, recibirás instrucciones.');
   }
 
-  if (memberError || !memberships || memberships.length === 0) {
-    console.log('[DEBUG] User has no active committee memberships');
-    return err('auth/no-committees', 'Si el correo está registrado, recibirás instrucciones.');
-  }
-
-  console.log('[DEBUG] User has', memberships.length, 'committee memberships');
-
-  // Si el usuario solo pertenece a un comité, registrar solicitud
-  if (memberships.length === 1) {
-    const committeeId = (memberships[0] as { committee_id: UUID }).committee_id;
-    console.log('[DEBUG] Creating request for committee:', committeeId);
-
-    // Crear solicitud
-    const { data: created, error: insertError } = await supabase
-      .from('password_change_requests')
-      .insert({
-        user_id: user.id,
-        committee_id: committeeId,
-        status: 'pending',
-        reason: reason?.trim() || null,
-        requested_by: null, // Guest request, no admin
-        requested_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
-
-    if (insertError) {
-      console.error('[ERROR] Failed to create request:', insertError);
-      return err(
-        'password_change/request-failed',
-        insertError.message.includes('unique')
-          ? 'Ya hay una solicitud pendiente para este usuario.'
-          : 'Si el correo está registrado, recibirás instrucciones.',
-      );
-    }
-
-    if (!created) {
-      console.error('[ERROR] Insert succeeded but no result returned');
-      return err('password_change/no-result', 'Si el correo está registrado, recibirás instrucciones.');
-    }
-
-    console.log('[DEBUG] Request created successfully:', (created as { id: UUID }).id);
-    revalidatePasswordPaths();
-    return { ok: true, value: { requestId: (created as { id: UUID }).id } };
-  }
-
-  // Si pertenece a múltiples comités, respuesta genérica (no revelar detalles)
-  console.log('[DEBUG] User has multiple committees, cannot auto-select');
-  return err('auth/multiple-committees', 'Si el correo está registrado, recibirás instrucciones.');
+  console.log('[DEBUG] Request created successfully:', (created as { id: UUID }).id);
+  revalidatePasswordPaths();
+  return { ok: true, value: { requestId: (created as { id: UUID }).id } };
 }
 
 

@@ -45,7 +45,7 @@ export default function RecoverPasswordPage() {
       // Siempre usar guest action con email
       const result = await requestPasswordChangeAsGuestAction(emailTrimmed, reason || undefined);
 
-      console.log('[CLIENT] Response:', result);
+      console.log('[CLIENT] Full response:', JSON.stringify(result, null, 2));
 
       if (result.ok) {
         setStateLocal({
