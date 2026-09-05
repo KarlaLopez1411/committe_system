@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { requestPasswordChangeAction, requestPasswordChangeAsGuestAction } from '@/server/actions/password-change-actions';
+import { requestPasswordChangeAsGuestAction } from '@/server/actions/password-change-actions';
 
 interface RequestChangeState {
   error?: string;
@@ -24,23 +24,28 @@ export default function RecoverPasswordPage() {
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
 
-  // Detectar si está autenticado (try-catch al cargar)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const emailTrimmed = email.trim();
+
     setStateLocal({ error: undefined, message: undefined });
+
+    // Validar email
+    if (!emailTrimmed || !emailTrimmed.includes('@')) {
+      setStateLocal({ error: 'Por favor ingresa un correo válido.' });
+      return;
+    }
+
     setPending(true);
 
     try {
-      let result;
+      console.log('[CLIENT] Submitting password change request with email:', emailTrimmed);
 
-      // Si es guest (proporciona email): usar acción de guest
-      if (email) {
-        result = await requestPasswordChangeAsGuestAction(email, reason || undefined);
-      } else {
-        // Si NO proporciona email: intenta usar acción autenticada (usuario actual)
-        result = await requestPasswordChangeAction(undefined, reason || undefined);
-      }
+      // Siempre usar guest action con email
+      const result = await requestPasswordChangeAsGuestAction(emailTrimmed, reason || undefined);
+
+      console.log('[CLIENT] Response:', result);
 
       if (result.ok) {
         setStateLocal({
@@ -52,6 +57,7 @@ export default function RecoverPasswordPage() {
         setStateLocal({ error: result.error.message });
       }
     } catch (err) {
+      console.error('[CLIENT] Exception:', err);
       setStateLocal({ error: 'Error al enviar la solicitud. Intenta de nuevo.' });
     } finally {
       setPending(false);
@@ -84,13 +90,14 @@ export default function RecoverPasswordPage() {
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Correo (opcional - deja vacío si estás autenticado)
+            Correo electrónico *
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={pending}
               placeholder="tu@correo.com"
+              required
               className="px-3 py-2 border border-gray-300 rounded-lg text-base disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
             />
           </label>
