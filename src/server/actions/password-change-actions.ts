@@ -6,6 +6,7 @@ import type { Ctx, Result, UUID } from '@/domain/types';
 import { err } from '@/domain/types';
 
 import { createPasswordChangeService } from '@/server/password-change-service';
+import { generateRecoveryToken, decryptRecoveryToken } from '@/server/password-recovery-tokens';
 import { resolveActionCtx } from '@/server/actions/resolve-ctx';
 
 const PASSWORD_PATHS = ['/configuracion'] as const;
@@ -39,87 +40,64 @@ export async function requestPasswordChangeAction(
 
 /**
  * Versión de guest: usuario no autenticado en /recuperar solicita cambio.
- * Requiere email, intenta buscar al usuario y registrar solicitud en su comité.
+ * Puede recibir:
+ * - email: correo directo (búsqueda en auth.users via RPC)
+ * - token: token encriptado que contiene el email (no requiere auth.users)
  */
 export async function requestPasswordChangeAsGuestAction(
-  email: string,
+  emailOrToken: string,
   reason?: string,
 ): Promise<Result<{ requestId: UUID }>> {
-  console.log('[DEBUG] requestPasswordChangeAsGuestAction called with:', { email });
+  console.log('[DEBUG] requestPasswordChangeAsGuestAction called');
+
+  if (!emailOrToken) {
+    return err('auth/invalid-input', 'Debe proporcionar email o token válido.');
+  }
+
+  // Intentar desencriptar si es token, sino usar como email
+  let email = emailOrToken;
+  const decrypted = decryptRecoveryToken(emailOrToken);
+  if (decrypted) {
+    email = decrypted;
+    console.log('[DEBUG] Token desencriptado, email extraído');
+  }
 
   if (!email || !email.includes('@')) {
     console.log('[DEBUG] Invalid email format');
     return err('auth/invalid-email', 'El correo no es válido.');
   }
 
+  console.log('[DEBUG] Processing request for email:', email);
+
   const supabase = await (await import('@/lib/supabase/server')).createSupabaseServerClient();
 
   try {
-    // Buscar usuario por email usando RPC de Supabase
-    // Este RPC debe retornar el user_id asociado a un email
-    console.log('[DEBUG] Calling Supabase RPC to find user by email');
+    // Buscar usuario por email usando RPC si está disponible
+    console.log('[DEBUG] Attempting to find user via RPC');
 
-    const { data: userIdResult, error: rpcError } = await supabase.rpc('get_user_id_by_email', {
-      email_input: email.toLowerCase().trim(),
+    const { data: userId, error: rpcError } = await supabase.rpc('find_user_by_email', {
+      p_email: email.toLowerCase().trim(),
     });
 
     if (rpcError) {
-      console.error('[ERROR] RPC call failed:', rpcError);
-      // Fallback: intentar búsqueda directa en auth si el RPC no existe
-      console.log('[DEBUG] RPC not available, trying direct auth lookup with pagination');
-
-      let user = null;
-      for (let i = 0; i < 10; i++) {
-        console.log(`[DEBUG] Searching auth page ${i}`);
-        const { data: { users }, error: authError } = await supabase.auth.admin.listUsers({
-          page: i,
-          perPage: 100,
-        });
-
-        if (authError) {
-          console.error(`[ERROR] Auth lookup failed on page ${i}:`, authError);
-          return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
-        }
-
-        if (!users || users.length === 0) break;
-
-        user = users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-        if (user) {
-          console.log('[DEBUG] User found via auth:', { userId: user.id });
-
-          // Buscar comités del usuario
-          const { data: memberships, error: memberError } = await supabase
-            .from('committee_users')
-            .select('committee_id')
-            .eq('user_id', user.id)
-            .eq('status', 'active');
-
-          if (memberError || !memberships || memberships.length === 0) {
-            console.log('[DEBUG] User has no active committees');
-            return err('auth/no-committees', 'Si el correo está registrado, recibirás instrucciones.');
-          }
-
-          if (memberships.length === 1) {
-            const committeeId = (memberships[0] as { committee_id: UUID }).committee_id;
-            return createPasswordRequest(supabase, user.id, committeeId, reason);
-          }
-
-          console.log('[DEBUG] User has multiple committees');
-          return err('auth/multiple-committees', 'Si el correo está registrado, recibirás instrucciones.');
-        }
+      console.error('[ERROR] RPC find_user_by_email failed:', rpcError);
+      // Si viene con token, es porque admin lo generó, pero no podemos procesar sin RPC
+      if (decrypted) {
+        return err(
+          'auth/lookup-failed',
+          'No se pudo procesar la solicitud. Por favor contacta al administrador.',
+        );
       }
-
-      console.log('[DEBUG] User not found');
-      return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
+      // Si es email directo, mostrar mensaje genérico
+      return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
     }
 
-    const userId = userIdResult as UUID | null;
     if (!userId) {
-      console.log('[DEBUG] RPC returned no user_id for email:', email);
+      console.log('[DEBUG] No user found with email:', email);
       return err('auth/user-not-found', 'Si el correo está registrado, recibirás instrucciones.');
     }
 
-    console.log('[DEBUG] User found via RPC:', { userId });
+    console.log('[DEBUG] User found:', { userId });
 
     // Buscar comités del usuario
     const { data: memberships, error: memberError } = await supabase
@@ -135,7 +113,6 @@ export async function requestPasswordChangeAsGuestAction(
 
     console.log('[DEBUG] User has', memberships.length, 'committee(s)');
 
-    // Si el usuario solo pertenece a un comité, registrar solicitud
     if (memberships.length === 1) {
       const committeeId = (memberships[0] as { committee_id: UUID }).committee_id;
       return createPasswordRequest(supabase, userId, committeeId, reason);
@@ -145,7 +122,10 @@ export async function requestPasswordChangeAsGuestAction(
     return err('auth/multiple-committees', 'Si el correo está registrado, recibirás instrucciones.');
   } catch (e) {
     console.error('[ERROR] Exception in requestPasswordChangeAsGuestAction:', e);
-    return err('auth/lookup-failed', 'Si el correo está registrado, recibirás instrucciones.');
+    return err(
+      'auth/lookup-failed',
+      'Error al procesar la solicitud. Por favor intenta de nuevo o contacta al administrador.',
+    );
   }
 }
 
@@ -252,4 +232,10 @@ export async function changePasswordAction(newPassword: string): Promise<Result<
   const ctx = await resolveCtx();
   if (!ctx) return unauthenticated();
   return createPasswordChangeService().changePassword(ctx, newPassword);
+}
+
+export function generateRecoveryLink(email: string): string {
+  const token = generateRecoveryToken(email);
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return `${baseUrl}/recuperar?token=${encodeURIComponent(token)}`;
 }

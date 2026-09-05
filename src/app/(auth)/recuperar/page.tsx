@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 import { requestPasswordChangeAsGuestAction } from '@/server/actions/password-change-actions';
+import { decryptRecoveryToken } from '@/server/password-recovery-tokens';
 
 interface RequestChangeState {
   error?: string;
@@ -13,16 +15,32 @@ interface RequestChangeState {
 const initialState: RequestChangeState = {};
 
 /**
- * Pantalla de solicitud de cambio de contraseña (reemplazo de recuperación vía email).
- *
- * El usuario (autenticado o no) solicita un cambio de contraseña. El admin lo aprueba desde
- * /configuracion y genera una contraseña temporal que comparte manualmente.
+ * Pantalla de solicitud de cambio de contraseña.
+ * Soporta dos flujos:
+ * 1. Email directo: usuario ingresa su email
+ * 2. Token: admin genera link con token encriptado (email pre-llenado)
  */
 export default function RecoverPasswordPage() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get('token');
+
   const [state, setStateLocal] = useState<RequestChangeState>(initialState);
   const [email, setEmail] = useState('');
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
+  const [isFromToken, setIsFromToken] = useState(false);
+
+  // Si viene con token, desencriptar email automáticamente
+  useEffect(() => {
+    if (token) {
+      const decrypted = decryptRecoveryToken(token);
+      if (decrypted) {
+        setEmail(decrypted);
+        setIsFromToken(true);
+        console.log('[CLIENT] Email pre-filled from token');
+      }
+    }
+  }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,8 +60,9 @@ export default function RecoverPasswordPage() {
     try {
       console.log('[CLIENT] Submitting password change request with email:', emailTrimmed);
 
-      // Siempre usar guest action con email
-      const result = await requestPasswordChangeAsGuestAction(emailTrimmed, reason || undefined);
+      // Si viene con token, pasamos el token; sino, el email directo
+      const input = token || emailTrimmed;
+      const result = await requestPasswordChangeAsGuestAction(input, reason || undefined);
 
       console.log('[CLIENT] Full response:', JSON.stringify(result, null, 2));
 
@@ -69,7 +88,7 @@ export default function RecoverPasswordPage() {
       <div className="text-center">
         <h2 className="text-lg font-semibold">Solicitar cambio de contraseña</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Solicita un cambio de contraseña. El administrador lo revisará y te proporcionará una nueva contraseña.
+          El administrador revisará tu solicitud y te proporcionará una nueva contraseña.
         </p>
       </div>
 
@@ -90,16 +109,21 @@ export default function RecoverPasswordPage() {
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1 text-sm font-medium">
-            Correo electrónico *
+            Correo electrónico {!isFromToken && '*'}
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={pending}
+              disabled={pending || isFromToken}
               placeholder="tu@correo.com"
-              required
+              required={!isFromToken}
               className="px-3 py-2 border border-gray-300 rounded-lg text-base disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
             />
+            {isFromToken && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                ✓ Pre-llenado desde el link del administrador
+              </p>
+            )}
           </label>
 
           <label className="flex flex-col gap-1 text-sm font-medium">
@@ -122,7 +146,7 @@ export default function RecoverPasswordPage() {
 
           <button
             type="submit"
-            disabled={pending}
+            disabled={pending || !email.trim()}
             className="min-h-touch rounded-lg bg-brand px-4 py-2 text-base font-semibold text-brand-fg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {pending ? 'Enviando…' : 'Solicitar cambio'}
