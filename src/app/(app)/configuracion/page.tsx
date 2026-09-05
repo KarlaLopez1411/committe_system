@@ -4,6 +4,7 @@ import {
   listRolesAction,
 } from '@/server/actions/role-actions';
 import { resolvePagePerms } from '@/server/actions/page-perms';
+import { listPendingPasswordChangesAction } from '@/server/actions/password-change-actions';
 
 import { ConfigTabs } from './config-tabs';
 
@@ -50,13 +51,15 @@ export default async function ConfigurationPage() {
 
   // Gestión de usuarios: solo disponible para quien tenga `users.manage`.
   // Las acciones devuelven AUTHZ_FORBIDDEN si no; ese caso se muestra como aviso.
-  const [usersResult, rolesResult] = await Promise.all([
+  const [usersResult, rolesResult, passwordChangesResult] = await Promise.all([
     listCommitteeUsersAction(),
     listRolesAction(),
+    listPendingPasswordChangesAction(),
   ]);
 
   const users = usersResult.ok ? usersResult.value : [];
   const roles = rolesResult.ok ? rolesResult.value : [];
+  const passwordChanges = passwordChangesResult.ok ? passwordChangesResult.value : [];
   const usersError = usersResult.ok
     ? null
     : 'No tienes permiso para gestionar los usuarios de este comité.';
@@ -74,6 +77,7 @@ export default async function ConfigurationPage() {
         code={committee.code}
         users={users}
         roles={roles}
+        passwordChanges={passwordChanges}
         usersError={usersError}
         canManage={perms.canManageCommittee}
       />

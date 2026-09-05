@@ -8,6 +8,7 @@ import type { CommitteeUserRow, RoleOption } from '@/server/role-service';
 import { CommitteeConfigForm } from './committee-config-form';
 import { CommitteeCodeCard } from './committee-code-card';
 import { UsersManager } from './users-manager';
+import { PasswordChangeRequestsTable } from './password-change-requests';
 
 interface CommitteeRow {
   id: UUID;
@@ -20,6 +21,7 @@ interface CommitteeRow {
 const ALL_TABS = [
   { id: 'datos', label: 'Datos del comité' },
   { id: 'usuarios', label: 'Usuarios' },
+  { id: 'cambios', label: 'Cambios de contraseña' },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -33,6 +35,7 @@ export function ConfigTabs({
   code,
   users,
   roles,
+  passwordChanges,
   usersError,
   canManage,
 }: {
@@ -40,6 +43,7 @@ export function ConfigTabs({
   code: string | null;
   users: CommitteeUserRow[];
   roles: RoleOption[];
+  passwordChanges: Array<{ id: UUID; userName: string | null; reason?: string; requestedAt: string }>;
   usersError: string | null;
   /** committee.manage: editar datos y gestionar usuarios. */
   canManage: boolean;
@@ -86,6 +90,10 @@ export function ConfigTabs({
 
       {active === 'usuarios' && canManage ? (
         <UsersManager users={users} roles={roles} error={usersError} />
+      ) : null}
+
+      {active === 'cambios' ? (
+        <PasswordChangeRequestsTable requests={passwordChanges} />
       ) : null}
     </div>
   );

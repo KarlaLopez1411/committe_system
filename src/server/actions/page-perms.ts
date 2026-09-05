@@ -41,6 +41,8 @@ export interface PagePerms {
   canCloseCashClosing: boolean;
   /** committee.manage || transactions.create (crear actividad) */
   canCreateActivity: boolean;
+  /** password_changes.approve */
+  canApprovePasswordChanges: boolean;
 }
 
 /** Todas las banderas en `false` (usuario sin sesión/permite fail-closed). */
@@ -59,6 +61,7 @@ const NONE: PagePerms = {
   canApproveCashClosing: false,
   canCloseCashClosing: false,
   canCreateActivity: false,
+  canApprovePasswordChanges: false,
 };
 
 /** Resuelve las banderas de permisos para la página actual. */
@@ -84,5 +87,6 @@ export async function resolvePagePerms(): Promise<PagePerms> {
     canApproveCashClosing: can(ctx, 'cash_closings.approve') || manage,
     canCloseCashClosing: can(ctx, 'cash_closings.close') || manage,
     canCreateActivity: manage || can(ctx, 'transactions.create'),
+    canApprovePasswordChanges: can(ctx, 'password_changes.approve'),
   };
 }

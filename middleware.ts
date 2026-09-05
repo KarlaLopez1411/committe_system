@@ -51,7 +51,7 @@ const LAST_ACTIVITY_COOKIE = 'sac-last-activity';
 const ACTIVE_COMMITTEE_COOKIE = 'sac-active-committee';
 
 /** Rutas que no requieren autenticación (accesibles sin sesión). */
-const PUBLIC_PATHS = ['/login', '/recuperar', '/auth', '/seleccionar-comite', '/registro'];
+const PUBLIC_PATHS = ['/login', '/recuperar', '/auth', '/seleccionar-comite', '/registro', '/cambiar-contrasena'];
 
 function isPublicPath(pathname: string): boolean {
   return pathname === '/' || PUBLIC_PATHS.some(
@@ -172,6 +172,23 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         return NextResponse.redirect(new URL('/seleccionar-comite', request.url));
       }
     } catch { /* best-effort; continue without committee */ }
+  }
+
+  // ── Validar cambio obligatorio de contraseña ────────────────────────────────
+  // Si el usuario tiene force_password_change = true, redirigir a /cambiar-contrasena
+  const pathname = request.nextUrl.pathname;
+  if (pathname !== '/cambiar-contrasena' && !isPublicPath(pathname)) {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('force_password_change')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.force_password_change) {
+        return NextResponse.redirect(new URL('/cambiar-contrasena', request.url));
+      }
+    } catch { /* best-effort; continue without check */ }
   }
 
   // Build new request headers so server actions can read them via `headers()`.
