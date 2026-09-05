@@ -8,6 +8,8 @@ import type { CommitteeUserRow, RoleOption } from '@/server/role-service';
 import { CommitteeConfigForm } from './committee-config-form';
 import { CommitteeCodeCard } from './committee-code-card';
 import { UsersManager } from './users-manager';
+import { PasswordChangeRequestsTable } from './password-change-requests';
+import { PasswordChangeRequestForm } from './password-change-request-form';
 
 interface CommitteeRow {
   id: UUID;
@@ -20,6 +22,7 @@ interface CommitteeRow {
 const ALL_TABS = [
   { id: 'datos', label: 'Datos del comité' },
   { id: 'usuarios', label: 'Usuarios' },
+  { id: 'cambios', label: 'Cambios de contraseña' },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -33,6 +36,8 @@ export function ConfigTabs({
   code,
   users,
   roles,
+  passwordChanges,
+  canApprovePasswordChanges,
   usersError,
   canManage,
 }: {
@@ -40,6 +45,19 @@ export function ConfigTabs({
   code: string | null;
   users: CommitteeUserRow[];
   roles: RoleOption[];
+  passwordChanges: Array<{
+    id: UUID;
+    userName: string | null;
+    status: string;
+    reason?: string;
+    requestedAt: string;
+    approvedAt?: string;
+    rejectedReason?: string;
+    passwordChangedAt?: string;
+    temporaryPasswordUsedAt?: string;
+    temporaryPassword?: string;
+  }>;
+  canApprovePasswordChanges: boolean;
   usersError: string | null;
   /** committee.manage: editar datos y gestionar usuarios. */
   canManage: boolean;
@@ -47,6 +65,11 @@ export function ConfigTabs({
   // La tab "Usuarios" solo existe para administradores.
   const tabs = canManage ? ALL_TABS : ALL_TABS.filter((t) => t.id !== 'usuarios');
   const [active, setActive] = useState<TabId>('datos');
+
+  // DEBUG
+  if (active === 'cambios') {
+    console.log('DEBUG: canApprovePasswordChanges =', canApprovePasswordChanges);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -86,6 +109,14 @@ export function ConfigTabs({
 
       {active === 'usuarios' && canManage ? (
         <UsersManager users={users} roles={roles} error={usersError} />
+      ) : null}
+
+      {active === 'cambios' ? (
+        canApprovePasswordChanges ? (
+          <PasswordChangeRequestsTable requests={passwordChanges} />
+        ) : (
+          <PasswordChangeRequestForm />
+        )
       ) : null}
     </div>
   );

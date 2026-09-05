@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import type { CommitteeUserRow, RoleOption } from '@/server/role-service';
 import { assignRoleAction, removeRoleAction } from '@/server/actions/role-actions';
+import { RecoveryLinkGenerator } from './recovery-link-generator';
 
 /**
  * Gestión de usuarios del comité: lista de usuarios con sus roles y controles
@@ -151,6 +152,12 @@ export function UsersManager({
                 </select>
                 {busy ? <span className="text-sm text-gray-500">Guardando…</span> : null}
               </div>
+
+              {u.email && (
+                <div>
+                  <RecoveryLinkGenerator userEmail={u.email} userName={u.fullName || 'Usuario'} />
+                </div>
+              )}
             </li>
           );
         })}

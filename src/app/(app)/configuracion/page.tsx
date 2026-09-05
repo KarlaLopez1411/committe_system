@@ -3,6 +3,12 @@ import {
   listCommitteeUsersAction,
   listRolesAction,
 } from '@/server/actions/role-actions';
+<<<<<<< HEAD
+import { resolvePagePerms } from '@/server/actions/page-perms';
+import { listPendingPasswordChangesAction } from '@/server/actions/password-change-actions';
+=======
+import { listAllPasswordChangesAction } from '@/server/actions/password-change-actions';
+>>>>>>> ff6bd29cb6d5 (Agregar historial completo de solicitudes con paginación)
 import { resolvePagePerms } from '@/server/actions/page-perms';
 
 import { ConfigTabs } from './config-tabs';
@@ -50,13 +56,17 @@ export default async function ConfigurationPage() {
 
   // Gestión de usuarios: solo disponible para quien tenga `users.manage`.
   // Las acciones devuelven AUTHZ_FORBIDDEN si no; ese caso se muestra como aviso.
-  const [usersResult, rolesResult] = await Promise.all([
+  const [usersResult, rolesResult, passwordChangesResult, permsResult] = await Promise.all([
     listCommitteeUsersAction(),
     listRolesAction(),
+    listAllPasswordChangesAction(),
+    resolvePagePerms(),
   ]);
 
   const users = usersResult.ok ? usersResult.value : [];
   const roles = rolesResult.ok ? rolesResult.value : [];
+  const passwordChanges = passwordChangesResult.ok ? passwordChangesResult.value : [];
+  const perms = permsResult;
   const usersError = usersResult.ok
     ? null
     : 'No tienes permiso para gestionar los usuarios de este comité.';
@@ -74,6 +84,8 @@ export default async function ConfigurationPage() {
         code={committee.code}
         users={users}
         roles={roles}
+        passwordChanges={passwordChanges}
+        canApprovePasswordChanges={perms.canApprovePasswordChanges}
         usersError={usersError}
         canManage={perms.canManageCommittee}
       />
