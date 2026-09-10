@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { generateRecoveryLink } from '@/server/actions/password-change-actions';
+import { generateRecoveryLinkAction } from '@/server/actions/password-change-actions';
 
 interface RecoveryLinkGeneratorProps {
   userEmail: string;
@@ -13,8 +13,8 @@ export function RecoveryLinkGenerator({ userEmail, userName }: RecoveryLinkGener
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const handleGenerateLink = () => {
-    const generatedLink = generateRecoveryLink(userEmail);
+  const handleGenerateLink = async () => {
+    const generatedLink = await generateRecoveryLinkAction(userEmail);
     setLink(generatedLink);
     setShowLink(true);
   };

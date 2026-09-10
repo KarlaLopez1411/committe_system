@@ -6,7 +6,7 @@ import type { Ctx, Result, UUID } from '@/domain/types';
 import { err } from '@/domain/types';
 
 import { createPasswordChangeService } from '@/server/password-change-service';
-import { generateRecoveryToken, decryptRecoveryToken } from '@/server/password-recovery-tokens';
+import { decryptRecoveryToken, generateRecoveryLink } from '@/server/password-recovery-tokens';
 import { resolveActionCtx } from '@/server/actions/resolve-ctx';
 
 const PASSWORD_PATHS = ['/configuracion'] as const;
@@ -234,8 +234,10 @@ export async function changePasswordAction(newPassword: string): Promise<Result<
   return createPasswordChangeService().changePassword(ctx, newPassword);
 }
 
-export function generateRecoveryLink(email: string): string {
-  const token = generateRecoveryToken(email);
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-  return `${baseUrl}/recuperar?token=${encodeURIComponent(token)}`;
+export async function generateRecoveryLinkAction(email: string): Promise<string> {
+  return generateRecoveryLink(email);
+}
+
+export async function decryptRecoveryTokenAction(token: string): Promise<string | null> {
+  return decryptRecoveryToken(token);
 }

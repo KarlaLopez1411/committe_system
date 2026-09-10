@@ -4,8 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { requestPasswordChangeAsGuestAction } from '@/server/actions/password-change-actions';
-import { decryptRecoveryToken } from '@/server/password-recovery-tokens';
+import { requestPasswordChangeAsGuestAction, decryptRecoveryTokenAction } from '@/server/actions/password-change-actions';
 
 interface RequestChangeState {
   error?: string;
@@ -26,19 +25,19 @@ export default function RecoverPasswordPage() {
 
   const [state, setStateLocal] = useState<RequestChangeState>(initialState);
   const [email, setEmail] = useState('');
-  const [reason, setReason] = useState('');
   const [pending, setPending] = useState(false);
   const [isFromToken, setIsFromToken] = useState(false);
 
   // Si viene con token, desencriptar email automáticamente
   useEffect(() => {
     if (token) {
-      const decrypted = decryptRecoveryToken(token);
-      if (decrypted) {
-        setEmail(decrypted);
-        setIsFromToken(true);
-        console.log('[CLIENT] Email pre-filled from token');
-      }
+      decryptRecoveryTokenAction(token).then((decrypted) => {
+        if (decrypted) {
+          setEmail(decrypted);
+          setIsFromToken(true);
+          console.log('[CLIENT] Email pre-filled from token');
+        }
+      });
     }
   }, [token]);
 
@@ -62,7 +61,7 @@ export default function RecoverPasswordPage() {
 
       // Si viene con token, pasamos el token; sino, el email directo
       const input = token || emailTrimmed;
-      const result = await requestPasswordChangeAsGuestAction(input, reason || undefined);
+      const result = await requestPasswordChangeAsGuestAction(input);
 
       console.log('[CLIENT] Full response:', JSON.stringify(result, null, 2));
 
@@ -71,7 +70,6 @@ export default function RecoverPasswordPage() {
           message: '✓ Solicitud enviada. El administrador la revisará y te proporcionará una nueva contraseña.',
         });
         setEmail('');
-        setReason('');
       } else {
         setStateLocal({ error: result.error.message });
       }
@@ -124,18 +122,6 @@ export default function RecoverPasswordPage() {
                 ✓ Pre-llenado desde el link del administrador
               </p>
             )}
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm font-medium">
-            Razón (opcional)
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              disabled={pending}
-              placeholder="¿Por qué necesitas cambiar tu contraseña?"
-              className="px-3 py-2 border border-gray-300 rounded-lg text-base resize-none disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900"
-              rows={3}
-            />
           </label>
 
           {state.error && (

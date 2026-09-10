@@ -9,6 +9,8 @@ import { add, subtract, ZERO } from '@/domain/money';
 import { createSupabaseAdminClient } from '@/lib/supabase/server';
 import { can } from '@/server/authz';
 
+const BONUS_CATEGORY_NAME = 'Bonos';
+
 export interface BonusMonthlyCutReport {
   campaignId: UUID;
   campaignName: string;
@@ -72,11 +74,16 @@ export function createReportService(deps: ReportServiceDeps = {}): ReportService
 
       const expectedAmount = add(ZERO, String(Number(c.monthly_amount) * (activeCount ?? 0)));
 
-      // cobrado del mes = (# de números con el mes pagado en el libro) × mensualidad.
-      // El periodo llega como 'YYYY-MM-01'; se extrae el mes 1–12.
+      // El periodo puede llegar como 'YYYY-MM' (input type=month) o 'YYYY-MM-01';
+      // se normaliza al primer día del mes para comparar contra transaction_date.
+      const periodStart = `${period.slice(0, 7)}-01`;
       const monthNum = Number(period.slice(5, 7));
-      const monthKey = String(monthNum);
 
+      // cobrado del mes = (# de números con el mes pagado en el libro) × mensualidad,
+      // más cualquier ingreso registrado manualmente en Transacciones bajo la
+      // categoría "Bonos" que no provenga del libro (para no contar dos veces los
+      // mismos números). Esto mantiene la cifra alineada con /bonos y además
+      // refleja los ingresos manuales.
       const { data: ledger } = await client
         .from('bonus_number_ledger')
         .select('pagos')
@@ -84,11 +91,38 @@ export function createReportService(deps: ReportServiceDeps = {}): ReportService
         .eq('committee_id', ctx.committeeId);
 
       let paidCount = 0;
+      const monthKey = String(monthNum);
       for (const r of (ledger ?? []) as { pagos: Record<string, boolean> | null }[]) {
         if (r.pagos && r.pagos[monthKey]) paidCount += 1;
       }
+      const ledgerAmount = add(ZERO, String(Number(c.monthly_amount) * paidCount));
 
-      const collectedAmount = add(ZERO, String(Number(c.monthly_amount) * paidCount));
+      const { data: cat } = await client
+        .from('transaction_categories')
+        .select('id')
+        .eq('committee_id', ctx.committeeId)
+        .eq('name', BONUS_CATEGORY_NAME)
+        .maybeSingle();
+      const categoryId = cat ? (cat as { id: UUID }).id : null;
+
+      let manualAmount: Money = ZERO;
+      if (categoryId) {
+        const { data: incomeTx } = await client
+          .from('financial_transactions')
+          .select('id, ledger_entries(amount)')
+          .eq('committee_id', ctx.committeeId)
+          .eq('category_id', categoryId)
+          .eq('type', 'income')
+          .eq('transaction_date', periodStart)
+          .neq('status', 'reversed')
+          .or('source_type.is.null,source_type.neq.bonus');
+        for (const t of (incomeTx ?? []) as { ledger_entries: { amount: string | number }[] | null }[]) {
+          for (const entry of t.ledger_entries ?? []) {
+            manualAmount = add(manualAmount, String(entry.amount));
+          }
+        }
+      }
+      const collectedAmount = add(ledgerAmount, manualAmount);
       const pendingCollect = subtract(expectedAmount, collectedAmount);
 
       // En este modelo simplificado el pago del responsable ya ingresa a caja al

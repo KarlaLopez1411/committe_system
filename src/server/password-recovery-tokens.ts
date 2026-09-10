@@ -24,6 +24,15 @@ export function generateRecoveryToken(email: string): string {
 }
 
 /**
+ * Genera link de recuperación de contraseña con token encriptado.
+ */
+export function generateRecoveryLink(email: string): string {
+  const token = generateRecoveryToken(email);
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  return `${baseUrl}/recuperar?token=${encodeURIComponent(token)}`;
+}
+
+/**
  * Desencripta token de recuperación y retorna el email.
  */
 export function decryptRecoveryToken(token: string): string | null {
