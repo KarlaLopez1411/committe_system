@@ -32,8 +32,8 @@ function makeTrackingClient() {
       filters[col] = val;
       return buildChain(table, filters);
     }),
-    is: vi.fn((_col: string, _val: unknown) => buildChain(table, filters)),
-    in: vi.fn((_col: string, _vals: unknown) => {
+    is: vi.fn(() => buildChain(table, filters)),
+    in: vi.fn(() => {
       queries.push({ table, filters: { ...filters } });
       return Promise.resolve({
         data: [],
@@ -50,7 +50,7 @@ function makeTrackingClient() {
 
   const client = {
     from: vi.fn((table: string) => ({
-      select: vi.fn((_cols?: string) => {
+      select: vi.fn(() => {
         const chain = buildChain(table);
         return chain;
       }),
@@ -63,7 +63,7 @@ function makeTrackingClient() {
 // Mock that returns seller A's numbers only when committee=A AND seller=A.
 function makeIsolatingClient(sellerNumbers: number[] = [1, 2, 3], committeeId = COMMITTEE_A, sellerId = SELLER_A) {
   const client = {
-    from: vi.fn((_tbl: string) => ({
+    from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn((col: string, val: unknown) => ({
           eq: vi.fn((col2: string, val2: unknown) => ({
@@ -83,7 +83,7 @@ function makeIsolatingClient(sellerNumbers: number[] = [1, 2, 3], committeeId = 
               : [],
             error: null,
           })),
-          in: vi.fn((_col: string, ids: string[]) => Promise.resolve({
+          in: vi.fn((...[, ids]: [string, string[]]) => Promise.resolve({
             data: ids.map((id) => ({ id: `due-${id}`, bonus_number_id: id, status: 'pendiente', amount: '100.00' })),
             error: null,
           })),

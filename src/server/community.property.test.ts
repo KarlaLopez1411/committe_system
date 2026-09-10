@@ -33,7 +33,7 @@ function makeInsertClient(opts: { insertedId?: string; insertError?: string | nu
   const { insertedId = 'new-id', insertError = null } = opts;
   const inserts: unknown[] = [];
   const client = {
-    from: vi.fn((_table: string) => ({
+    from: vi.fn(() => ({
       insert: vi.fn((row: unknown) => {
         inserts.push(row);
         return { select: vi.fn(() => ({ single: vi.fn(() => Promise.resolve({ data: insertError ? null : { id: insertedId }, error: insertError ? { message: insertError, code: '99999' } : null })) })) };

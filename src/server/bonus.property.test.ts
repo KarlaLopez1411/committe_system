@@ -38,7 +38,7 @@ function makeCtx(userId = USER_A, perms: string[] = ['committee.manage', 'bonuse
 function simpleMock(overrides: Record<string, unknown> = {}) {
   const client = {
     from: vi.fn((tbl: string) => ({
-      insert: vi.fn((_row: unknown) => {
+      insert: vi.fn(() => {
         const code = overrides.insertErrorCode as string | undefined;
         return { select: vi.fn(() => ({ single: vi.fn(() => Promise.resolve({ data: code ? null : { id: 'new-id' }, error: code ? { code, message: 'conflict' } : null })) })) };
       }),

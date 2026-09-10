@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Ctx, Result, UUID } from '@/domain/types';
@@ -710,7 +710,7 @@ function encryptTemporaryPassword(password: string): string {
   );
 
   // Asegurar que la clave tiene 32 bytes (256 bits)
-  const keyHash = require('crypto').createHash('sha256').update(key).digest();
+  const keyHash = createHash('sha256').update(key).digest();
 
   const iv = randomBytes(16);
   const cipher = createCipheriv('aes-256-gcm', keyHash, iv);
@@ -741,7 +741,7 @@ function decryptTemporaryPassword(encrypted: string | undefined | null): string 
 
     // Detectar si está encriptado (formato: iv:encrypted:authTag)
     if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
-      const keyHash = require('crypto').createHash('sha256').update(key).digest();
+      const keyHash = createHash('sha256').update(key).digest();
       const iv = Buffer.from(parts[0], 'base64');
       const encryptedData = parts[1];
       const authTag = Buffer.from(parts[2], 'base64');

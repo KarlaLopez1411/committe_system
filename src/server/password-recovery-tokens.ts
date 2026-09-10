@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 /**
  * Genera token encriptado que contiene email para recuperación de contraseña.
@@ -12,7 +12,7 @@ export function generateRecoveryToken(email: string): string {
     'utf-8'
   );
 
-  const keyHash = require('crypto').createHash('sha256').update(key).digest();
+  const keyHash = createHash('sha256').update(key).digest();
   const iv = randomBytes(16);
 
   const cipher = createCipheriv('aes-256-gcm', keyHash, iv);
@@ -44,7 +44,7 @@ export function decryptRecoveryToken(token: string): string | null {
       'utf-8'
     );
 
-    const keyHash = require('crypto').createHash('sha256').update(key).digest();
+    const keyHash = createHash('sha256').update(key).digest();
     const parts = token.split(':');
 
     if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) return null;

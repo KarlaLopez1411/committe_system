@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Ctx, Result, UUID } from '@/domain/types';
 import { err } from '@/domain/types';
@@ -133,7 +134,7 @@ export async function requestPasswordChangeAsGuestAction(
  * Helper para crear solicitud de cambio de contraseña.
  */
 async function createPasswordRequest(
-  supabase: any,
+  supabase: SupabaseClient,
   userId: UUID,
   committeeId: UUID,
   reason?: string,
